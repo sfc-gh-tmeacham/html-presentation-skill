@@ -1,0 +1,71 @@
+# Graphics Embedding Rules
+
+All custom graphics MUST be converted to base64 data URIs before embedding to keep the HTML fully self-contained with zero external dependencies.
+
+## Environment
+
+NEVER run helper scripts in the global Python environment. Always use the `scripts/run_script.py` wrapper, which automatically creates and reuses an isolated virtual environment (preferring `uv` if available, falling back to `python -m venv`). Works on macOS, Linux, and Windows. The venv and its dependencies (Pillow, segno) are installed on first run and cached in `scripts/.venv/`.
+
+```bash
+python scripts/run_script.py <script.py> [args...]
+```
+
+## Shell Safety
+
+When writing automation that generates or manipulates HTML, avoid inline Python/heredocs in zsh — the `!` character in HTML (e.g., `<!DOCTYPE>`) triggers zsh history expansion and causes `event not found` errors. Write Python scripts to temporary files and execute them instead.
+
+## Available Scripts
+
+| Script | Purpose |
+|---|---|
+| `run_script.py <script.py> [args...]` | **Wrapper** — creates/reuses uv venv and runs any script below |
+| `img_to_base64.py <file>` | Convert any image (raster or SVG) to a base64 data URI |
+| `resize_image.py <in> <out> [--max-size 800]` | Resize raster image, Lanczos downscale |
+| `screenshot_to_slide.py <in> [--max-size] [--padding]` | Auto-crop + resize + base64 in one step |
+| `svg_optimize.py <in> [out]` | Strip SVG metadata/comments for smaller output |
+| `color_swap_svg.py <in> [out] [--from-color] [--to-color]` | Recolor SVG fills/strokes for dark backgrounds |
+| `embed_image.py <deck.html> [--max-size 800] [--dry-run]` | Replace all `{{IMG:...}}` placeholders with base64 data URIs |
+| `insert_presenter.py <deck.html> --name N --title T [--photo F]` | Insert presenter slide (resize + base64 + inject + renumber) |
+| `validate_deck.py <deck.html>` | Lint a finished deck: IDs, counter, placeholders, accessibility, transitions |
+| `generate_qr_appendix.py <deck.html>` | Scan for external links, append QR code "Resources" slide |
+
+## Raster Images (PNG, JPG, GIF, WebP)
+
+1. Resize if needed: `scripts/run_script.py resize_image.py <input> <output> --max-size 800`
+2. Convert: `scripts/run_script.py img_to_base64.py <file>` → paste into `<img src="...">`
+3. Use `object-fit: contain` so the image is never stretched or cropped.
+
+## Screenshots and Photos
+
+Use `scripts/run_script.py screenshot_to_slide.py <input> [--max-size 800] [--padding 0]` to auto-crop whitespace, resize, and get a base64 URI in one step. Add `--padding 16` for breathing room.
+
+## SVG Graphics
+
+1. Optimize: `scripts/run_script.py svg_optimize.py <input.svg> <output.svg>`
+2. Recolor if needed (dark fills on dark bg): `scripts/run_script.py color_swap_svg.py <in> <out> --from-color "#000" --to-color "#fff"`
+3. Convert: `scripts/run_script.py img_to_base64.py <file.svg>` → embed via `<img src="data:image/svg+xml;base64,...">`
+4. To inherit CSS custom properties (e.g., `var(--accent)`), inline the `<svg>` element directly instead.
+
+## Context Window Safety (CRITICAL)
+
+- NEVER read base64 data into context. When reading an HTML file with embedded images, use targeted line-range reads or grep to skip over `<img src="data:` lines.
+- NEVER paste or type base64 strings into HTML. Use `{{IMG:path}}` placeholder tokens during authoring — let `embed_image.py` handle injection.
+- NEVER capture stdout of `img_to_base64.py` into context. Use `embed_image.py` which writes directly to the HTML file.
+- Placeholder syntax: `<img src="{{IMG:path/to/image.png}}" alt="description">` or with max size: `<img src="{{IMG:path/to/image.png|300}}" alt="thumbnail">`
+- Paths inside `{{IMG:...}}` support tilde expansion (`~/Downloads/photo.jpg`) and relative paths.
+- For presenter headshots, `insert_presenter.py` handles the full pipeline end-to-end.
+
+## CSS Styling for Embedded Graphics
+
+- Rounded corners: `border-radius: 12px`
+- Constrain size: `max-width: 400px; max-height: 300px` (never exceed 60% of slide width)
+- Center: `display: block; margin: 0 auto`
+- Logos: keep small (`max-height: 80px`), position in slide header/footer, not as main visual
+- For images that may blend into the dark background: `background: rgba(255,255,255,0.05); padding: 16px; border-radius: 16px`
+- Never upscale a small image — display at native size
+
+## User Guidance (communicate during Step 1)
+
+- Transparent backgrounds (PNG/SVG) work best against the dark slide theme
+- Vector formats (SVG) are preferred for logos and diagrams — stay sharp at any size
+- Large photos or screenshots will be resized automatically
