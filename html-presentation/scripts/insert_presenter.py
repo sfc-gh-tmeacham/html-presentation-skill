@@ -36,6 +36,7 @@ import mimetypes
 import os
 import re
 import sys
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -64,6 +65,7 @@ def resize_image(path: str, max_size: int = 300) -> bytes:
 
     try:
         img = Image.open(path)
+        img.load()
     except Exception as exc:
         print(f"Error: Cannot open image '{path}': {exc}", file=sys.stderr)
         sys.exit(1)
@@ -282,7 +284,8 @@ def insert_slide(html: str, presenter_html: str) -> str:
 
     html = html.replace(
         insertion_comment,
-        presenter_html + "\n" + insertion_comment
+        presenter_html + "\n" + insertion_comment,
+        1,
     )
 
     for i in range(max_slide, first_slide_num - 1, -1):
@@ -388,8 +391,28 @@ def main() -> None:
 
     html = insert_slide(html, presenter_html)
 
-    with open(deck_path, "w", encoding="utf-8") as f:
-        f.write(html)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=Path(deck_path).parent, prefix=".presenter_tmp_", suffix=".html"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(html)
+        tmp_fd = None
+        os.replace(tmp_path, deck_path)
+        tmp_path = None
+    except Exception as exc:
+        if tmp_fd is not None:
+            try:
+                os.close(tmp_fd)
+            except OSError:
+                pass
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        print(f"Error: Could not write '{deck_path}': {exc}", file=sys.stderr)
+        sys.exit(1)
 
     names = ", ".join(p["name"] for p in presenters)
     total_match = re.search(r'<span id="total">(\d+)</span>', html)

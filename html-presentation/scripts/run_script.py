@@ -202,7 +202,7 @@ def list_available_scripts() -> list[str]:
     Returns:
         Sorted list of script filenames.
     """
-    this_file = Path(__file__).resolve().name
+    this_file = Path(__file__).name
     return sorted(
         f.name
         for f in SCRIPT_DIR.glob("*.py")

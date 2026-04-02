@@ -38,6 +38,7 @@ Exit codes:
 - 1: one or more checks failed
 """
 
+import argparse
 import re
 import sys
 from collections import Counter
@@ -96,8 +97,8 @@ SCRIPT_TAG_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECA
 ENTITY_RE = re.compile(r"&\w+;")
 UL_BLOCK_RE = re.compile(r"<ul([^>]*)>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
 SYMBOL_CHAR_CLASS = (
-    r"[\U0001F300-\U0001FAFF\u2600-\u27BF\u2300-\u23FF\u2700-\u27BF"
-    r"\u2190-\u21FF\u25A0-\u25FF\u2600-\u26FF\u2702-\u27B0"
+    r"[\U0001F300-\U0001FAFF\u2300-\u23FF\u2600-\u27BF"
+    r"\u2190-\u21FF\u25A0-\u25FF"
     r"\u2714\u2716\u2717\u2718\u2713\u2715\u2022\u25CF\u25CB"
     r"\u2705\u274C\u274E\u2611\u2612\u2610]"
 )
@@ -130,6 +131,8 @@ SVG_CONTAINER_RE = re.compile(
     r'(?:max-height\s*:\s*)([\d.]+)(vh|px)',
     re.IGNORECASE,
 )
+EXTERNAL_LINK_RE = re.compile(r'<a\s[^>]*href="https?://[^"]*"', re.IGNORECASE)
+APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
 
 
 def strip_html(text: str) -> str:
@@ -272,8 +275,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         passes.append("No double-bullet lists (symbols + default bullets)")
 
     # 12. QR appendix — warn if external links exist but no appendix slide
-    external_links = re.findall(r'<a\s[^>]*href="https?://[^"]*"', html, re.IGNORECASE)
-    has_appendix = bool(re.search(r'<!-- Slide \d+: Links \(Appendix\) -->', html))
+    external_links = EXTERNAL_LINK_RE.findall(html)
+    has_appendix = bool(APPENDIX_MARKER_RE.search(html))
     if external_links and not has_appendix:
         warns.append(
             f"Deck has {len(external_links)} external link(s) but no QR appendix slide — "
@@ -338,11 +341,13 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: python run_script.py validate_deck.py <deck.html>", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Validate a slide deck HTML file against the HTML Presentation skill rules."
+    )
+    parser.add_argument("html_file", help="Path to the HTML deck file")
+    args = parser.parse_args()
 
-    html_path = Path(sys.argv[1])
+    html_path = Path(args.html_file)
     if not html_path.is_file():
         print(f"Error: '{html_path}' not found.", file=sys.stderr)
         sys.exit(1)

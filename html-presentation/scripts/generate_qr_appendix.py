@@ -47,6 +47,10 @@ ACCENT_RE = re.compile(r"--accent:\s*(#[0-9A-Fa-f]{3,8})\s*;")
 TOTAL_RE = re.compile(r'(<span\s+id="total">)\d+(</span>)')
 COUNTER_RE = re.compile(r'<div\s+class="counter"')
 SLIDE_ID_RE = re.compile(r'<div\s+class="slide[^"]*"[^>]*id="s(\d+)"', re.IGNORECASE)
+APPENDIX_SLIDE_RE = re.compile(
+    r'\n?<!-- Slide \d+: Links \(Appendix\) -->.*?(?=\n?<!-- Slide|\n?<div\s+class="counter")',
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 def extract_links(html: str) -> list[tuple[str, str]]:
@@ -230,11 +234,7 @@ def remove_existing_appendix(html: str) -> tuple[str, int]:
     Returns:
         A tuple of (cleaned_html, slides_removed).
     """
-    appendix_slide_re = re.compile(
-        r'\n?<!-- Slide \d+: Links \(Appendix\) -->.*?(?=\n?<!-- Slide|\n?<div\s+class="counter")',
-        re.DOTALL | re.IGNORECASE,
-    )
-    html, removed_count = appendix_slide_re.subn("", html)
+    html, removed_count = APPENDIX_SLIDE_RE.subn("", html)
     return html, removed_count
 
 
@@ -245,7 +245,6 @@ def find_last_slide_num(html: str) -> int:
 
 
 def main() -> None:
-    import argparse
     parser = argparse.ArgumentParser(
         description="Append QR-code appendix slide(s) to an HTML presentation."
     )
