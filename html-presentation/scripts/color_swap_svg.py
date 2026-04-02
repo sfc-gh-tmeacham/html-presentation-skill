@@ -13,17 +13,17 @@ Handles multiple color representations:
 
 Usage::
 
-    python color_swap_svg.py <input.svg> [<output.svg>] \\
+    python color_swap_svg.py <input.svg> [<output.svg>] \
         [--from-color "#000000"] [--to-color "#ffffff"]
 
 Examples::
 
     # Make a dark logo visible on the deck's dark background:
-    python color_swap_svg.py logo.svg logo-light.svg \\
+    python color_swap_svg.py logo.svg logo-light.svg \
         --from-color "#000" --to-color "#fff"
 
     # Recolor an icon to the deck's accent color:
-    python color_swap_svg.py icon.svg icon-accent.svg \\
+    python color_swap_svg.py icon.svg icon-accent.svg \
         --from-color "#000" --to-color "#29b5e8"
 
 If ``<output>`` is omitted the modified SVG is printed to stdout.
@@ -39,17 +39,14 @@ from pathlib import Path
 # Regex to validate hex color strings (3, 4, 6, or 8 hex digits).
 HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
+# Requires Python 3.9+
 # Maps named colors to all their common hex/rgb representations so we can
 # find and replace every variant in a single pass.
 COLOR_ALIASES: dict[str, list[str]] = {
     "black": ["#000", "#000000", "rgb(0,0,0)", "rgb(0, 0, 0)"],
     "white": ["#fff", "#ffffff", "rgb(255,255,255)", "rgb(255, 255, 255)"],
-}
-
-# Quick lookup for expanding common shorthand hex codes to their full form.
-HEX_EXPAND: dict[str, str] = {
-    "#000": "#000000",
-    "#fff": "#ffffff",
+    "none": ["none"],
+    "transparent": ["transparent", "rgba(0,0,0,0)", "rgba(0, 0, 0, 0)"],
 }
 
 # Maximum SVG file size we'll process (10 MB).
@@ -119,8 +116,14 @@ def validate_color(color: str, label: str) -> None:
     if c.startswith("#") and HEX_COLOR_RE.match(c):
         return
 
-    # Accept rgb() notation (loose check).
+    # Accept rgb() notation (loose check with digit-range validation).
     if c.startswith("rgb(") and c.endswith(")"):
+        m = re.match(r'rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$', c)
+        if m:
+            if all(0 <= int(v) <= 255 for v in m.groups()):
+                return  # valid
+            print(f"Error: rgb() channel values must be 0–255, got: {c!r}", file=sys.stderr)
+            sys.exit(1)
         return
 
     print(
@@ -151,14 +154,20 @@ def normalize_color(c: str) -> list[str]:
     if c in COLOR_ALIASES:
         variants.extend(COLOR_ALIASES[c])
 
-    # If we have a known shorthand, add its expanded form.
-    expanded = HEX_EXPAND.get(c)
-    if expanded:
-        variants.append(expanded)
+    # Normalize rgb() input: add both the space-free and canonical spaced variants.
+    if c.startswith("rgb("):
+        unspaced = re.sub(r'\s+', '', c)
+        spaced = re.sub(r',', ', ', unspaced)
+        variants.append(unspaced)
+        variants.append(spaced)
+        # Note: this is still not exhaustive — unusual whitespace may still cause misses.
 
     # Expand shorthand hex (#abc → #aabbcc) or compress full hex (#aabbcc → #abc).
     if len(c) == 4 and c.startswith("#"):
         full = f"#{c[1]*2}{c[2]*2}{c[3]*2}"
+        variants.append(full)
+    elif len(c) == 5 and c.startswith("#"):
+        full = f"#{c[1]*2}{c[2]*2}{c[3]*2}{c[4]*2}"
         variants.append(full)
     elif len(c) == 7 and c.startswith("#"):
         # Only compressible if each pair of digits is identical (e.g. #112233 → #123).
@@ -169,11 +178,19 @@ def normalize_color(c: str) -> list[str]:
         )
         if short:
             variants.append(short)
+    elif len(c) == 9 and c.startswith("#"):
+        short = (
+            f"#{c[1]}{c[3]}{c[5]}{c[7]}"
+            if c[1] == c[2] and c[3] == c[4] and c[5] == c[6] and c[7] == c[8]
+            else None
+        )
+        if short:
+            variants.append(short)
 
     return list(dict.fromkeys(v.lower() for v in variants))
 
 
-def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
+def swap_colors(svg_content: str, from_color: str, to_color: str, from_variants: list[str] | None = None) -> str:
     """Replace all occurrences of ``from_color`` with ``to_color`` in SVG source.
 
     Targets three CSS/SVG properties:
@@ -191,18 +208,22 @@ def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
         svg_content: Raw SVG source text.
         from_color: The color to find (any supported format).
         to_color: The replacement color value.
+        from_variants: Pre-computed list of color variants to match. If None,
+            computed via ``normalize_color(from_color)``.
 
     Returns:
         The modified SVG source with colors swapped.
     """
     # Build the full set of equivalent representations for the source color.
-    from_variants = normalize_color(from_color)
+    if from_variants is None:
+        from_variants = normalize_color(from_color)
     count = 0
 
     # Property names to target for color replacement.
     properties = ["fill", "stroke", "stop-color"]
 
     # Pre-compile all (variant × property) patterns before iterating.
+    # Note: regex operates on raw SVG text; colors inside XML comments (<!-- ... -->) may also be replaced.
     compiled: list[tuple[re.Pattern, str]] = []
     for variant in from_variants:
         escaped = re.escape(variant)
@@ -210,7 +231,7 @@ def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
             try:
                 compiled.append((
                     re.compile(
-                        rf'({re.escape(prop)}\s*[:=]\s*["\']?){escaped}(?![0-9a-fA-F])(["\']?\s*[;\}}]?)',
+                        rf'({re.escape(prop)}\s*[:=]\s*["\']?){escaped}(?![0-9a-fA-F])(["\']|\s*[;\}}])',
                         re.IGNORECASE,
                     ),
                     prop,
@@ -221,15 +242,13 @@ def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
                     file=sys.stderr,
                 )
 
+    def replace_color(m: re.Match) -> str:
+        return m.group(1) + to_color + m.group(2)
+
     for pattern, _prop in compiled:
-        try:
-            svg_content, n = pattern.subn(lambda m, c=to_color: m.group(1) + c + m.group(2), svg_content)
-            count += n
-        except re.error as exc:
-            print(
-                f"Warning: Substitution failed for pattern '{pattern.pattern[:40]}': {exc}",
-                file=sys.stderr,
-            )
+        new_content, n = pattern.subn(replace_color, svg_content)
+        svg_content = new_content
+        count += n
 
     if count == 0:
         print(
@@ -272,6 +291,15 @@ def main() -> None:
     validate_color(args.from_color, "--from-color")
     validate_color(args.to_color, "--to-color")
 
+    from_normalized = normalize_color(args.from_color)
+    to_normalized = normalize_color(args.to_color)
+    if set(from_normalized) & set(to_normalized):
+        print(
+            f"Warning: '{args.from_color}' and '{args.to_color}' are equivalent colors.  Nothing to do.",
+            file=sys.stderr,
+        )
+        sys.exit(0)
+
     # Read the SVG source.
     try:
         svg = p.read_text(encoding="utf-8")
@@ -295,7 +323,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    result = swap_colors(svg, args.from_color, args.to_color)
+    result = swap_colors(svg, args.from_color, args.to_color, from_variants=from_normalized)
 
     # Verify the result still has the <svg> tag — guard against catastrophic
     # regex damage.

@@ -7,11 +7,12 @@ after the Agenda slide, renumber all subsequent slide IDs, and update the
 slide total counter.
 
 Requires Pillow (installed automatically when invoked via run_script.py).
+Requires: Pillow >= 9.1.0
 
 Usage::
 
-    python run_script.py insert_presenter.py <deck.html> \\
-        --name "Jane Doe" --title "VP Engineering" [--photo headshot.png] \\
+    python run_script.py insert_presenter.py <deck.html> \
+        --name "Jane Doe" --title "VP Engineering" [--photo headshot.png] \
         [--name "John Smith" --title "CTO" [--photo john.png]]
 
 Multiple presenters are supported by repeating --name/--title/--photo groups.
@@ -21,30 +22,49 @@ used when omitted.
 Examples::
 
     # Single presenter with headshot
-    python run_script.py insert_presenter.py slides.html \\
-        --name "Tom Meacham" --title "Principal Solution Engineer" \\
+    python run_script.py insert_presenter.py slides.html \
+        --name "Tom Meacham" --title "Principal Solution Engineer" \
         --photo ~/Downloads/tom.jpeg
 
     # Two presenters, one without a photo
-    python run_script.py insert_presenter.py slides.html \\
-        --name "Alice" --title "CEO" --photo alice.png \\
+    python run_script.py insert_presenter.py slides.html \
+        --name "Alice" --title "CEO" --photo alice.png \
         --name "Bob" --title "CTO"
 """
+# requires Python 3.10+
 
 import base64
 import mimetypes
 import os
 import re
+import stat
 import sys
 import tempfile
 from html import escape
 from io import BytesIO
 from pathlib import Path
 
+mimetypes.add_type("image/svg+xml", ".svg")
+
 try:
     from PIL import Image
 except ImportError:
     Image = None
+
+
+class InsertPresenterError(Exception):
+    pass
+
+
+HEADSHOT_SIZE_CSS = "clamp(100px,12vmin,160px)"
+HEADSHOT_ICON_CLAMP = "clamp(3rem,5vw,4.5rem)"
+HEADSHOT_SIZE_CSS_MULTI = "clamp(80px,10vmin,140px)"
+HEADSHOT_ICON_CLAMP_MULTI = "clamp(2rem,4vw,3.5rem)"
+
+FORMAT_TO_MIME = {
+    "JPEG": "image/jpeg", "PNG": "image/png", "GIF": "image/gif",
+    "WEBP": "image/webp", "BMP": "image/bmp", "SVG": "image/svg+xml",
+}
 
 
 def resize_image(path: str, max_size: int = 300) -> bytes:
@@ -58,18 +78,18 @@ def resize_image(path: str, max_size: int = 300) -> bytes:
         The resized image as bytes in its original format.
 
     Raises:
-        SystemExit: If Pillow is not installed or the file cannot be opened.
+        InsertPresenterError: If Pillow is not installed or the file cannot be opened.
     """
     if Image is None:
-        print("Error: Pillow is required for image resizing.", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError("Error: Pillow is required for image resizing. Install with: pip install Pillow")
+
+    Image.MAX_IMAGE_PIXELS = 50_000_000
 
     try:
         img = Image.open(path)
         img.load()
     except Exception as exc:
-        print(f"Error: Cannot open image '{path}': {exc}", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError(f"Error: Cannot open image '{path}': {exc}")
 
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), Image.LANCZOS)
@@ -94,13 +114,22 @@ def image_to_base64(path: str, max_size: int = 300) -> str:
         A complete ``data:<mime>;base64,...`` URI string.
     """
     ext = Path(path).suffix.lower()
-    mime = mimetypes.guess_type(path)[0] or "image/png"
+    guessed_mime = mimetypes.guess_type(path)[0]
 
     if ext == ".svg":
         with open(path, "rb") as f:
             raw = f.read()
+        mime = guessed_mime or "image/svg+xml"
     else:
         raw = resize_image(path, max_size)
+        if Image is not None:
+            try:
+                img = Image.open(BytesIO(raw))
+                mime = FORMAT_TO_MIME.get(img.format, guessed_mime or "image/png")
+            except Exception:
+                mime = guessed_mime or "image/png"
+        else:
+            mime = guessed_mime or "image/png"
 
     encoded = base64.b64encode(raw).decode("ascii")
     return f"data:{mime};base64,{encoded}"
@@ -150,7 +179,7 @@ def build_presenter_slide(presenters: list[dict]) -> str:
         p = presenters[0]
         headshot = build_headshot_html(
             p["name"], p.get("b64"),
-            "clamp(100px,12vmin,160px)", "clamp(3rem,5vw,4.5rem)",
+            HEADSHOT_SIZE_CSS, HEADSHOT_ICON_CLAMP,
         )
         return (
             '<!-- Presenter Slide -->\n'
@@ -176,7 +205,7 @@ def build_presenter_slide(presenters: list[dict]) -> str:
     for p in presenters:
         headshot = build_headshot_html(
             p["name"], p.get("b64"),
-            "clamp(80px,10vmin,140px)", "clamp(2rem,4vw,3.5rem)",
+            HEADSHOT_SIZE_CSS_MULTI, HEADSHOT_ICON_CLAMP_MULTI,
         )
         cards.append(
             f'    <div class="card" style="text-align:center;padding:28px 24px;">\n'
@@ -205,11 +234,20 @@ def build_presenter_slide(presenters: list[dict]) -> str:
 
 
 def find_insertion_point(html: str) -> str | None:
-    """Find the HTML comment or element immediately after the Title slide.
+    """Find the HTML comment to insert the presenter slide before.
 
-    The presenter slide is always inserted right after the Title slide
-    (before the Agenda). Looks for ``<!-- Agenda`` or ``<!-- Slide 2:``
-    as the marker to insert before.
+    Searches for the insertion marker in this priority order:
+
+    1. ``<!-- Slide 2: ... -->`` only if it mentions "agenda"
+    2. ``<!-- Slide N: Agenda ... -->`` for any slide N
+    3. ``<!-- Slide N: ... -->`` for any N >= 2
+
+    For standard decks (Title slide followed immediately by Agenda), the
+    presenter slide ends up right after the Title slide. For non-standard
+    layouts (e.g. Title → Company Overview → Agenda), insertion happens
+    before the first Agenda slide found, which may not be Slide 2. If no
+    Agenda slide exists, insertion falls back to the first non-title slide
+    (N >= 2).
 
     Args:
         html: The full deck HTML string.
@@ -217,26 +255,13 @@ def find_insertion_point(html: str) -> str | None:
     Returns:
         The matched comment string, or None if not found.
     """
-    for pattern_str in [r'<!-- Slide 2:.*?-->', r'<!-- Slide \d+:\s*Agenda.*?-->', r'<!-- Slide \d+:.*?-->']:
+    for i, pattern_str in enumerate([r'<!-- Slide 2:.*?-->', r'<!-- Slide \d+:\s*Agenda.*?-->', r'<!-- Slide (?:[2-9]|\d{2,}):.*?-->']):
         match = re.search(pattern_str, html, re.DOTALL)
         if match:
+            if i == 0 and 'agenda' not in match.group(0).lower():
+                continue
             return match.group(0)
     return None
-
-
-def count_slides(html: str) -> int:
-    """Count the number of slides by finding the highest slide ID.
-
-    Args:
-        html: The full deck HTML string.
-
-    Returns:
-        The highest slide number found.
-    """
-    ids = re.findall(r'id="s(\d+)"', html)
-    if not ids:
-        return 0
-    return max(int(x) for x in ids)
 
 
 def find_total_span(html: str) -> int | None:
@@ -265,19 +290,16 @@ def insert_slide(html: str, presenter_html: str) -> str:
         The modified HTML with the presenter slide inserted.
 
     Raises:
-        SystemExit: If the insertion point or slide IDs cannot be found.
+        InsertPresenterError: If the insertion point or slide IDs cannot be found.
     """
     insertion_comment = find_insertion_point(html)
     if not insertion_comment:
-        print("Error: Could not find a <!-- Slide N: ... --> comment to insert before.", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError("Error: Could not find a <!-- Slide N: ... --> comment to insert before.")
 
     slide_num_match = re.search(r'Slide (\d+)', insertion_comment)
     if not slide_num_match:
-        print("Error: Could not parse slide number from insertion comment.", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError("Error: Could not parse slide number from insertion comment.")
     first_slide_num = int(slide_num_match.group(1))
-    max_slide = count_slides(html)
     current_total = find_total_span(html)
 
     html = html.replace(
@@ -286,12 +308,11 @@ def insert_slide(html: str, presenter_html: str) -> str:
         1,
     )
 
-    for i in range(max_slide, first_slide_num - 1, -1):
-        html = re.sub(
-            rf'(<div\s[^>]*(?<![a-zA-Z0-9_-])id="s){i}(")',
-            rf'\g<1>{i + 1}\2',
-            html,
-        )
+    html = re.sub(
+        r'(<div\s[^>]*(?<![a-zA-Z0-9_-])id="s)(\d+)(")',
+        lambda m: f'{m.group(1)}{int(m.group(2)) + 1}{m.group(3)}' if int(m.group(2)) >= first_slide_num else m.group(0),
+        html,
+    )
 
     html = re.sub(
         r'(<div\s[^>]*\bid=")s_presenter(")',
@@ -340,16 +361,30 @@ def parse_presenters(args: list[str]) -> tuple[str, list[dict]]:
     i = 1
     while i < len(args):
         arg = args[i]
-        if arg == "--name" and i + 1 < len(args):
+        if arg in ("--name", "--title", "--photo") and i + 1 >= len(args):
+            print(f"Error: {arg} requires a value", file=sys.stderr)
+            sys.exit(1)
+        if arg == "--name":
             if current.get("name"):
                 presenters.append(current)
                 current = {}
-            current["name"] = args[i + 1]
+            value = args[i + 1].strip()
+            if not value:
+                print("Error: --name value cannot be empty", file=sys.stderr)
+                sys.exit(1)
+            current["name"] = value
             i += 2
-        elif arg == "--title" and i + 1 < len(args):
-            current["title"] = args[i + 1]
+        elif arg == "--title":
+            if "name" not in current:
+                print("Error: --title must follow --name", file=sys.stderr)
+                sys.exit(1)
+            value = args[i + 1].strip()
+            if not value:
+                print("Error: --title value cannot be empty", file=sys.stderr)
+                sys.exit(1)
+            current["title"] = value
             i += 2
-        elif arg == "--photo" and i + 1 < len(args):
+        elif arg == "--photo":
             current["photo"] = args[i + 1]
             i += 2
         else:
@@ -361,6 +396,11 @@ def parse_presenters(args: list[str]) -> tuple[str, list[dict]]:
 
     if not presenters:
         print("Error: At least one --name/--title pair is required.", file=sys.stderr)
+        sys.exit(1)
+
+    MAX_PRESENTERS = 9
+    if len(presenters) > MAX_PRESENTERS:
+        print(f"Error: maximum {MAX_PRESENTERS} presenters supported, got {len(presenters)}", file=sys.stderr)
         sys.exit(1)
 
     for p in presenters:
@@ -375,48 +415,59 @@ def main() -> None:
     """Parse arguments, process images, build and insert the presenter slide."""
     deck_path, presenters = parse_presenters(sys.argv[1:])
 
-    for p in presenters:
-        if "photo" in p:
-            photo_path = os.path.expanduser(p["photo"])
-            if not Path(photo_path).is_file():
-                print(f"Warning: Photo not found '{photo_path}', using placeholder.", file=sys.stderr)
-            else:
-                p["b64"] = image_to_base64(photo_path)
-
-    presenter_html = build_presenter_slide(presenters)
-
-    with open(deck_path, encoding="utf-8") as f:
-        html = f.read()
-
-    html = insert_slide(html, presenter_html)
-
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=Path(deck_path).parent, prefix=".presenter_tmp_", suffix=".html"
-    )
     try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-            f.write(html)
-        tmp_fd = None
-        os.replace(tmp_path, deck_path)
-        tmp_path = None
-    except Exception as exc:
-        if tmp_fd is not None:
-            try:
-                os.close(tmp_fd)
-            except OSError:
-                pass
-        if tmp_path is not None:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-        print(f"Error: Could not write '{deck_path}': {exc}", file=sys.stderr)
-        sys.exit(1)
+        for p in presenters:
+            if "photo" in p:
+                photo_path = os.path.expanduser(p["photo"])
+                if not Path(photo_path).is_file():
+                    print(f"Warning: Photo not found '{photo_path}', using placeholder.", file=sys.stderr)
+                else:
+                    p["b64"] = image_to_base64(photo_path)
 
-    names = ", ".join(p["name"] for p in presenters)
-    total_match = re.search(r'<span id="total">(\d+)</span>', html)
-    total = total_match.group(1) if total_match else "?"
-    print(f"Done — inserted presenter slide ({names}), {total} slides total.")
+        presenter_html = build_presenter_slide(presenters)
+
+        try:
+            with open(deck_path, encoding="utf-8") as f:
+                html = f.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"Error: Cannot read '{deck_path}': {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        html = insert_slide(html, presenter_html)
+
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=Path(deck_path).parent, prefix=".presenter_tmp_", suffix=".html"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(html)
+            tmp_fd = None
+            orig_mode = Path(deck_path).stat().st_mode
+            os.chmod(tmp_path, stat.S_IMODE(orig_mode))
+            os.replace(tmp_path, deck_path)
+            tmp_path = None
+        except Exception as exc:
+            if tmp_fd is not None:
+                try:
+                    os.close(tmp_fd)
+                except OSError:
+                    pass
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+            print(f"Error: Could not write '{deck_path}': {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        names = ", ".join(p["name"] for p in presenters)
+        total_val = find_total_span(html)
+        total = str(total_val) if total_val is not None else "?"
+        print(f"Done — inserted presenter slide ({names}), {total} slides total.")
+
+    except InsertPresenterError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

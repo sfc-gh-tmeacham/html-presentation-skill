@@ -15,6 +15,8 @@ Example::
     # → data:image/svg+xml;base64,PD94bWwg...
 """
 
+from __future__ import annotations
+
 import base64
 import mimetypes
 import sys
@@ -30,6 +32,8 @@ MIME_OVERRIDES: dict[str, str] = {
     ".gif": "image/gif",
     ".webp": "image/webp",
     ".ico": "image/x-icon",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
 }
 
 # Maximum file size we'll attempt to encode (20 MB).  Larger files almost
@@ -60,6 +64,7 @@ def validate_input(file_path: Path) -> None:
         print(f"Error: '{file_path}' is empty (0 bytes).", file=sys.stderr)
         sys.exit(1)
 
+    # Note: TOCTOU — file may change between stat() and read_bytes()
     if size > MAX_FILE_SIZE_BYTES:
         mb = size / (1024 * 1024)
         print(
@@ -82,7 +87,8 @@ def img_to_base64(file_path: Path) -> str:
         ``data:image/png;base64,iVBORw0KGgo...``.
 
     Raises:
-        SystemExit: If the file cannot be read or encoded.
+        OSError: If the file cannot be read.
+        MemoryError: If the file is too large to hold in memory.
     """
     # Determine the MIME type — prefer our explicit map, fall back to the
     # standard library's guess, and default to a generic binary type.
@@ -105,34 +111,37 @@ def img_to_base64(file_path: Path) -> str:
     # Read raw bytes and encode to base64 ASCII.
     try:
         raw = file_path.read_bytes()
-    except OSError as exc:
-        print(f"Error: Could not read '{file_path}': {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
         encoded = base64.b64encode(raw).decode("ascii")
-    except (MemoryError, Exception) as exc:
-        print(f"Error: Base64 encoding failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+    except OSError as exc:
+        raise OSError(f"Could not read '{file_path}': {exc}") from exc
+    except MemoryError:
+        raise
 
     return f"data:{mime};base64,{encoded}"
 
 
 def main() -> None:
     """Parse the single CLI argument and print the data URI to stdout."""
+    if len(sys.argv) == 2 and sys.argv[1] in ("--help", "-h"):
+        print("Usage: img_to_base64.py <image_file>")
+        print("Convert an image file to a base64 data URI and print it to stdout.")
+        print("  Supported formats: JPEG, PNG, GIF, BMP, TIFF, SVG, WebP, ICO")
+        print("  Maximum file size: 20 MB")
+        sys.exit(0)
+
     if len(sys.argv) != 2:
         print("Usage: img_to_base64.py <image_file>", file=sys.stderr)
+        print("  Supported formats: JPEG, PNG, GIF, BMP, TIFF, SVG, WebP, ICO", file=sys.stderr)
+        print("  Maximum file size: 20 MB", file=sys.stderr)
         sys.exit(1)
 
     p = Path(sys.argv[1])
     validate_input(p)
 
-    uri = img_to_base64(p)
-
-    # Sanity check: a valid data URI should start with "data:" and contain
-    # base64 content after the comma.
-    if not uri.startswith("data:") or "," not in uri:
-        print("Error: Generated data URI appears malformed.", file=sys.stderr)
+    try:
+        uri = img_to_base64(p)
+    except (OSError, MemoryError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
     print(uri)

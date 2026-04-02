@@ -80,16 +80,31 @@ PLACEHOLDER_RE = re.compile(r"\{\{IMG:(.+?)\}\}")
 MAX_FILE_SIZE_BYTES: int = 20 * 1024 * 1024
 
 
-def resolve_path(token_path: str, base_dir: Path) -> Path:
+def resolve_path(token_path: str, base_dir: Path) -> tuple[Path | None, str | None]:
     """Resolve a placeholder path to an absolute filesystem path.
 
     Supports tilde expansion and relative paths resolved from *base_dir*.
+    Returns (path, None) on success or (None, error_message) on failure.
     """
-    expanded = os.path.expanduser(token_path)
-    p = Path(expanded)
+    path_str = token_path.strip()
+    if path_str.startswith("~"):
+        expanded = Path(path_str).expanduser().resolve()
+        home = Path.home().resolve()
+        if not expanded.is_relative_to(home):
+            return None, f"SECURITY: tilde path '{token_path}' escapes home directory"
+        if not expanded.is_file():
+            return None, f"NOT FOUND: {token_path!r}"
+        return expanded, None
+
+    p = Path(path_str).expanduser()
     if not p.is_absolute():
         p = base_dir / p
-    return p.resolve()
+    resolved = p.resolve()
+    try:
+        resolved.relative_to(base_dir.resolve())
+    except ValueError:
+        return None, f"SECURITY: path '{token_path}' escapes base directory"
+    return resolved, None
 
 
 def resize_and_encode(file_path: Path, max_size: int) -> tuple[str, int]:
@@ -99,10 +114,11 @@ def resize_and_encode(file_path: Path, max_size: int) -> tuple[str, int]:
         A tuple of (data_uri, raw_byte_count).
     """
     if Image is None:
-        print("Error: Pillow is required for raster image processing.", file=sys.stderr)
-        sys.exit(1)
+        raise RuntimeError("Pillow is required for --max-size. Install with: pip install Pillow")
 
     img = Image.open(file_path)
+    if img.width * img.height > Image.MAX_IMAGE_PIXELS:
+        raise ValueError(f"Image '{file_path.name}' exceeds maximum pixel count")
     img.load()
 
     if max(img.size) > max_size:
@@ -129,12 +145,13 @@ def encode_svg(file_path: Path) -> tuple[str, int]:
         A tuple of (data_uri, raw_byte_count).
     """
     raw = file_path.read_bytes()
+    print(f"Warning: embedding SVG '{file_path.name}' without sanitization — ensure it is trusted", file=sys.stderr)
     encoded = base64.b64encode(raw).decode("ascii")
     return f"data:image/svg+xml;base64,{encoded}", len(raw)
 
 
 def encode_file(file_path: Path, max_size: int) -> tuple[str, int]:
-    """Encode any supported image file to a base64 data URI.
+    """Encode any supported image file to a data URI.
 
     Dispatches to SVG or raster handler based on extension.
 
@@ -146,10 +163,8 @@ def encode_file(file_path: Path, max_size: int) -> tuple[str, int]:
         return encode_svg(file_path)
     if ext in RASTER_EXTENSIONS:
         return resize_and_encode(file_path, max_size)
-    raw = file_path.read_bytes()
-    mime = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    encoded = base64.b64encode(raw).decode("ascii")
-    return f"data:{mime};base64,{encoded}", len(raw)
+    allowed = RASTER_EXTENSIONS | {".svg"}
+    raise ValueError(f"Unsupported file type '{ext}'; allowed: {', '.join(sorted(allowed))}")
 
 
 def parse_token(token_body: str) -> tuple[str, int | None]:
@@ -190,9 +205,6 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
     Returns:
         A tuple of (modified_html, count_replaced, total_bytes_added, errors).
     """
-    if not PLACEHOLDER_RE.search(html):
-        return html, 0, 0, []
-
     count = 0
     total_bytes = 0
     errors: list[str] = []
@@ -201,17 +213,21 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
         for match in PLACEHOLDER_RE.finditer(html):
             path_str, per_token_size = parse_token(match.group(1))
             max_size = per_token_size if per_token_size is not None else default_max_size
-            file_path = resolve_path(path_str, base_dir)
-            if not file_path.exists():
-                errors.append(f"  NOT FOUND: {path_str} (resolved: {file_path})")
+            file_path, resolve_err = resolve_path(path_str, base_dir)
+            if resolve_err:
+                errors.append(resolve_err)
+            elif not file_path.exists():
+                errors.append(f"NOT FOUND: {path_str} (resolved: {file_path})")
             elif not file_path.is_file():
-                errors.append(f"  NOT A FILE: {path_str} (resolved: {file_path})")
-            elif file_path.stat().st_size > MAX_FILE_SIZE_BYTES:
-                mb = file_path.stat().st_size / (1024 * 1024)
-                errors.append(f"  TOO LARGE: {path_str} ({mb:.1f} MB)")
+                errors.append(f"NOT A FILE: {path_str} (resolved: {file_path})")
             else:
-                print(f"  WOULD EMBED: {path_str} (max {max_size}px)")
-                count += 1
+                st = file_path.stat()
+                if st.st_size > MAX_FILE_SIZE_BYTES:
+                    mb = st.st_size / (1024 * 1024)
+                    errors.append(f"TOO LARGE: {path_str} ({mb:.1f} MB)")
+                else:
+                    print(f"  WOULD EMBED: {path_str} (max {max_size}px)")
+                    count += 1
         return html, count, 0, errors
 
     def _replace(match: re.Match) -> str:
@@ -219,27 +235,31 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
         token_body = match.group(1)
         path_str, per_token_size = parse_token(token_body)
         max_size = per_token_size if per_token_size is not None else default_max_size
-        file_path = resolve_path(path_str, base_dir)
+        file_path, resolve_err = resolve_path(path_str, base_dir)
 
+        if resolve_err:
+            errors.append(resolve_err)
+            return match.group(0)
         if not file_path.exists():
-            errors.append(f"  NOT FOUND: {path_str} (resolved: {file_path})")
+            errors.append(f"NOT FOUND: {path_str} (resolved: {file_path})")
             return match.group(0)
         if not file_path.is_file():
-            errors.append(f"  NOT A FILE: {path_str} (resolved: {file_path})")
+            errors.append(f"NOT A FILE: {path_str} (resolved: {file_path})")
             return match.group(0)
-        if file_path.stat().st_size > MAX_FILE_SIZE_BYTES:
-            mb = file_path.stat().st_size / (1024 * 1024)
-            errors.append(f"  TOO LARGE: {path_str} ({mb:.1f} MB)")
+        st = file_path.stat()
+        if st.st_size > MAX_FILE_SIZE_BYTES:
+            mb = st.st_size / (1024 * 1024)
+            errors.append(f"TOO LARGE: {path_str} ({mb:.1f} MB)")
             return match.group(0)
 
         try:
-            data_uri, _ = encode_file(file_path, max_size)
+            data_uri, byte_count = encode_file(file_path, max_size)
         except Exception as exc:
-            errors.append(f"  ENCODE ERROR: {path_str} — {exc}")
+            errors.append(f"ENCODE ERROR: {path_str} — {exc}")
             return match.group(0)
 
         count += 1
-        total_bytes += len(data_uri)
+        total_bytes += byte_count
         return data_uri
 
     result = PLACEHOLDER_RE.sub(_replace, html)
@@ -265,15 +285,32 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.max_size <= 0:
+        parser.error("--max-size must be a positive integer")
+
     html_path = Path(args.html_file)
     if not html_path.is_file():
         print(f"Error: '{html_path}' not found or not a file.", file=sys.stderr)
         sys.exit(1)
 
-    base_dir = Path(args.base_dir) if args.base_dir else html_path.parent
-    base_dir = base_dir.resolve()
+    base_dir = Path(args.base_dir).expanduser().resolve() if args.base_dir else html_path.parent.resolve()
 
-    html = html_path.read_text(encoding="utf-8")
+    if args.base_dir and not base_dir.is_dir():
+        print(f"Error: --base-dir '{base_dir}' is not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.max_size and Image is None:
+        print("Error: --max-size requires Pillow. Install with: pip install Pillow", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        html = html_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        print(f"Error: '{html_path}' is not valid UTF-8.", file=sys.stderr)
+        sys.exit(1)
+    except OSError as exc:
+        print(f"Error: Could not read '{html_path}': {exc}", file=sys.stderr)
+        sys.exit(1)
 
     html, count, total_bytes, errors = process_html(
         html, args.max_size, base_dir, dry_run=args.dry_run
@@ -282,7 +319,7 @@ def main() -> None:
     if errors:
         print("Errors:", file=sys.stderr)
         for err in errors:
-            print(err, file=sys.stderr)
+            print(f"  {err}", file=sys.stderr)
 
     if args.dry_run:
         print(f"Dry run: {count} placeholder(s) would be replaced.")

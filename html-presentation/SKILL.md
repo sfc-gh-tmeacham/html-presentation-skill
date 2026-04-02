@@ -36,7 +36,7 @@ Ask the user for:
 - **Presenter slide** -- would they like to include a presenter slide? If yes, ask how many presenters there are, then gather for each: (1) full name, (2) title/role. Optionally ask if they'd like to include a headshot photo for each presenter — they can provide a file path **or paste the image directly into the chat**. The presenter count determines the layout (see Presenter slide visual rules). The presenter slide does NOT count toward the slide count max.
 
 **Handling the title slide logo:**
-- **Snowflake logo**: Read `assets/snowflake-logo.svg`, inline the SVG directly as the **first child inside `.slide-inner`** on the title slide (before the `<h3>` eyebrow). The SVG is a full 184×44px horizontal lockup (snowflake mark + "Snowflake" wordmark). Style it with `display: block; margin: 0 auto clamp(10px, 2vh, 18px); height: clamp(44px, 7vh, 80px); width: auto;` so it appears centered and large above the title text. Do NOT use `position: absolute` — keep it in the normal flex flow. Do NOT base64-encode SVG — inline the `<svg>` markup directly. **⚠️ CRITICAL: The SVG contains 16 `<path>` elements — 7 for the snowflake mark (x ≈ 0–43) and 9 for the "Snowflake" wordmark text (x ≈ 60–184). You MUST copy ALL 16 paths from the file. Copying only the mark paths will render the icon without the "Snowflake" wordmark text. Verify the inlined SVG has exactly 16 `<path>` elements before declaring the title slide complete.**
+- **Snowflake logo**: Read `assets/snowflake-logo.svg` and note the file path — you will inline it during Step 3. Do NOT attempt to inline it now.
 - **Custom logo**: Treat it the same as any user-provided image — use a `{{IMG:path}}` placeholder and resolve it in the embed phase.
 - **No logo**: Omit any logo element from the title slide entirely.
 
@@ -74,7 +74,7 @@ Audience: [AUDIENCE]
 Key points to cover: [KEY_POINTS]
 
 Return:
-1. 3–5 compelling statistics or data points (with source context)
+1. 3–5 compelling statistics or data points (with source context). For any statistic about a specific named organization (account counts, employee headcount, revenue, data volumes, growth percentages), prefix it with `[UNVERIFIED — confirm with customer]`.
 2. 2–3 concrete real-world examples or case studies
 3. 1–2 strong quotes from credible sources
 4. Key terminology or concepts the audience needs to know
@@ -85,6 +85,8 @@ Be specific. Format as a structured markdown brief. Do not write slide copy — 
 ```
 
 Use the returned brief as the factual foundation for slide copy in Step 2.
+
+**⚠️ Verify customer-specific facts before building:** Statistics returned by the research subagent are estimates — they may be wrong. Any customer-specific number (data volumes, account counts, employee headcounts, revenue figures, growth percentages) MUST be presented to the user for confirmation during Step 2 before being written into the deck. A wrong stat is costly to fix because it typically appears in multiple places: stat cards, SVG `<text>` labels, speaker notes, tooltips, and bullet lists. If a fact cannot be confirmed, omit it rather than using the researched estimate.
 
 **Checkpoint:** Save the brief to `[topic-slug]-brief.md` in the working directory immediately after the subagent returns.
 
@@ -119,7 +121,9 @@ Generate a single self-contained HTML file following the Slide Structure, HTML O
 - `references/accent-colors.md`
 - `references/graphics-embedding.md`
 
-**Iterative batch-build (REQUIRED for decks with more than 12 slides):**
+**Inlining the Snowflake logo (if selected in Step 1):** Read `assets/snowflake-logo.svg` and inline the `<svg>` markup directly as the **first child inside `.slide-inner`** on the title slide (before the `<h3>` eyebrow). Style it with `display: block; margin: 0 auto clamp(10px, 2vh, 18px); height: clamp(44px, 7vh, 80px); width: auto;`. Do NOT use `position: absolute`. Do NOT base64-encode SVG. **⚠️ CRITICAL: The SVG contains 16 `<path>` elements — 7 for the snowflake mark (x ≈ 0–43) and 9 for the "Snowflake" wordmark text (x ≈ 60–184). Copy ALL 16 paths. Copying only the mark paths omits the "Snowflake" wordmark. Verify the inlined SVG has exactly 16 `<path>` elements before moving on.**
+
+**Iterative Batch-Build (required for 13+ slides):**
 
 Large decks written in a single `write` call risk context timeouts — a partial write is worse than no file. Instead, always use the batch approach:
 
@@ -146,7 +150,11 @@ Large decks written in a single `write` call risk context timeouts — a partial
 
 4. **Final batch**: The last `edit` replaces the final placeholder with the remaining slides and **no new placeholder**. The file is now complete.
 
-**Batch sizing guideline:** ~10 slides per batch is a safe size. For a 31-slide deck: Batch 1 = s1–s10, Batch 2 = s11–s20, Batch 3 = s21–s31.
+**Batch sizing guideline:** Size batches by complexity, not just count:
+- **5 slides per batch** when the batch includes 2+ SVG-heavy slides (architecture diagrams, step flows, inline SVG illustrations)
+- **10 slides per batch** for simpler content (card grids, stat callouts, quotes, icon lists)
+
+When in doubt, use 5. Smaller batches add one extra `edit` call but prevent losing a large amount of work to a context timeout mid-write.
 
 **For decks of 12 slides or fewer:** A single `write` call is fine — use the standard approach.
 
@@ -190,12 +198,19 @@ Prompt:
 ```
 Validate and fix the HTML slide deck at: [DECK_PATH]
 
-Step 1: Run the validator:
-  python scripts/run_script.py validate_deck.py [DECK_PATH]
+Step 1: Run the validator with context enabled:
+  python scripts/run_script.py validate_deck.py [DECK_PATH] --context 5
 
-Step 2: If any errors are reported, read the HTML file using targeted line-range reads or grep — skip any line containing `src="data:` to avoid pulling base64 data into context. Fix every reported issue in the file.
+  The `--context 5` flag prints ±5 lines around each warning/failure, with any base64
+  content automatically redacted to `[base64 data omitted — Nkb]`. This gives you all
+  the context needed to make each fix. **Do NOT use the Read tool to open the HTML file
+  directly** — the validator output is sufficient and avoids base64 flooding your context.
 
-Step 3: Re-run the validator. Repeat until it passes or until you have made 3 fix attempts.
+Step 2: For each reported issue, apply the fix using the Edit tool with the exact
+  surrounding text shown in the context snippet. Each message includes a slide ID and
+  line number (e.g. `s10 line 450 →`) to pinpoint the location.
+
+Step 3: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
 
 Return a one-line summary: "PASS — N slides, all checks clean" or "Fixed N issues: [brief list]". If validation still fails after 3 attempts, list the remaining errors.
 ```
@@ -209,6 +224,7 @@ Then manually verify:
   - No two `<rect>` elements in the same column overlap — confirm `y + height` of each box is less than `y` of the next
   - No `<text transform="rotate(` present — rotated text signals a layout problem
   - `max-height` on SVG containers is ≥ 58vh — lower values cause excess empty slide space
+  - No unverified customer facts in `<text>` elements — SVG text is easy to overlook during review. Grep for numbers and proper nouns inside `<text>` tags and confirm they match user-verified data
 
 If any check fails, fix the HTML and re-preview before proceeding.
 
@@ -217,6 +233,14 @@ If any check fails, fix the HTML and re-preview before proceeding.
 Ask: "Please take a moment to carefully review the full presentation. Let me know about any changes you'd like — for example: wording or copy edits on any slide, adding or removing slides, rearranging the slide order, additional custom graphics or images, color or styling tweaks, or anything else. I'm happy to iterate until it's exactly right."
 
 **⚠️ MANDATORY STOPPING POINT**: Wait for user feedback before making changes.
+
+**Common iteration patterns and their implications:**
+- **Wording / copy edit**: Edit the slide HTML directly. Re-run the validator if the change touches a list, link, or SVG `<text>` element.
+- **Add a slide**: Insert the new slide HTML, renumber all subsequent `id="sN"` attributes in reverse order (highest first), update `<span id="total">`, and re-run the validator.
+- **Remove a slide**: Same renumbering as above. If the removed slide was in a stat card grid, also update `grid-template-columns:repeat(N,1fr)` to match the new card count.
+- **Change accent color**: Global find-replace the old hex value with the new one across the entire file. Check that SVG fills and stroke colors using the accent are also updated.
+- **Add/remove an external link**: Re-run `generate_qr_appendix.py` — it is idempotent and will rebuild the QR appendix to match the current link set.
+- **Any structural change**: Re-run `validate_deck.py --context 5` before presenting the updated deck.
 
 ---
 
@@ -239,39 +263,14 @@ Adjust the number of core content slides based on topic complexity. Simple topic
 **Presenter slide visual rules:**
 - If there is **one presenter**: use a centered layout with the optional headshot above the name and title. The headshot should be displayed in a circle (`border-radius: 50%`, `width: clamp(100px, 12vmin, 160px)`, `height: clamp(100px, 12vmin, 160px)`, `object-fit: cover`) with a subtle accent-colored ring border (`border: 3px solid var(--accent)`). Name in bold white (`clamp(1.5rem, 2.5vw, 2.25rem)`), title in secondary color (`clamp(1rem, 1.5vw, 1.5rem)`) below.
 - If there are **two presenters**: use a two-column side-by-side layout, each column centered with circular headshot, name, and title.
-- If there are **three or more presenters**: use a card grid (2 or 3 columns) with one card per presenter.
+- If there are **three or more presenters**: use a card grid (2 or 3 columns) with one card per presenter. Maximum of 9 presenters — `insert_presenter.py` will error if this limit is exceeded.
 - If **no headshot is provided** for a presenter, display a Material Icon placeholder (`person` icon, `clamp(3rem, 5vw, 4.5rem)`, accent-colored) inside the circle instead.
 - Stagger the card/column animations for sequential reveal.
 - The heading should be a small uppercase `h3` label ("Presented By" or "Your Presenters") with the accent color.
 - **All presenter headshots MUST be circularly cropped using CSS** (`border-radius: 50%; object-fit: cover; width/height equal`). Do NOT pre-crop the source image.
 - Headshot images must be processed through the Graphics Embedding Rules (see `references/graphics-embedding.md`).
 
-Example HTML structure (single presenter):
-```html
-<h3 class="anim">Presented By</h3>
-<div class="anim" style="display:flex;flex-direction:column;align-items:center;gap:16px;transition-delay:0.1s;">
-  <img src="data:image/png;base64,..." alt="Presenter Name"
-    style="width:clamp(100px,12vmin,160px);height:clamp(100px,12vmin,160px);border-radius:50%;object-fit:cover;border:3px solid var(--accent);">
-  <div style="text-align:center;">
-    <h4 style="font-size:clamp(1.5rem,2.5vw,2.25rem);margin-bottom:0.25rem;">Presenter Name</h4>
-    <p style="font-size:clamp(1rem,1.5vw,1.5rem);color:var(--secondary);">Title / Role</p>
-  </div>
-</div>
-```
-
-Example HTML structure (multiple presenters):
-```html
-<h3 class="anim">Your Presenters</h3>
-<div class="card-grid anim stagger" style="grid-template-columns:repeat(2,1fr);gap:24px;transition-delay:0.1s;">
-  <div class="card" style="text-align:center;padding:28px 24px;">
-    <img src="data:image/png;base64,..." alt="Name"
-      style="width:clamp(80px,10vmin,140px);height:clamp(80px,10vmin,140px);border-radius:50%;object-fit:cover;border:3px solid var(--accent);margin-bottom:0.75rem;">
-    <h4 style="font-size:clamp(1.1rem,2vw,1.5rem);margin-bottom:0.25rem;">Presenter Name</h4>
-    <p style="font-size:clamp(0.875rem,1.3vw,1.125rem);color:var(--secondary);">Title / Role</p>
-  </div>
-  <!-- repeat for each presenter -->
-</div>
-```
+For HTML patterns, see the **Presenter Slide** section in `references/visual-components.md`.
 
 **Agenda Slide (mandatory):** Every deck MUST include an Agenda slide immediately after the Title slide (or after the Presenter slide, if present). The Agenda does NOT count toward the slide count max. List 3-6 thematic sections (not every individual slide).
 
@@ -468,13 +467,8 @@ Call `updateNotesWindow()` inside the `show()` function, and bind `openNotesWind
     - **No overlapping rects.** For each column of stacked `<rect>` boxes, verify `y_N + height_N < y_(N+1)` before writing. Overlapping boxes silently clip text — the browser renders both without error. Require a minimum 10px gap between boxes.
     - **No rotated text.** `transform="rotate(...)"` on a `<text>` element almost always means the container is too narrow. Fix it by widening the container, using a multi-line label, or redesigning the output as a proper readable box.
     - **SVG `max-height` ≥ 58vh.** Diagrams with `max-height: 52vh` or lower render too small and leave large empty black bands below them on the slide. Use at least `58vh`; `65vh` is preferred for full-width architecture diagrams.
-17. **SVG diagram boxes must be sized to fit their text — never guess.** Before setting a `<rect>` width, calculate the required space: monospace font at `font-size: 10` ≈ 7px/char; sans-serif at `font-size: 10` ≈ 6px/char. Add a minimum of 24px total horizontal padding. Always size the box to the **longest text line** it contains. Technical identifiers (function names, SQL keywords, long tokens like `SYSTEM$STREAM_HAS_DATA()`) routinely exceed 150px — default to ≥ 200px box width for any box containing a function name or long token. Expand the SVG `viewBox` width accordingly so boxes never clip. For single-column flow diagrams, use `viewBox="0 0 260 H"` with `cx=130` as the center — this gives 130px on each side and accommodates boxes up to 240px wide with 10px margins.
+17. **When removing a stat card from a grid, update the column count.** Dropping a card from `grid-template-columns:repeat(4,1fr)` without updating the repeat value leaves remaining cards stretched across empty columns. Always update `repeat(N,1fr)` to match the actual number of cards remaining.
+18. **Omit uncertain facts rather than guessing.** If a customer-specific figure cannot be confirmed by the user, remove it entirely. An omission is always safer than a wrong number in a customer-facing presentation — and wrong numbers tend to appear in 5–7 places at once.
+19. **SVG diagram boxes must be sized to fit their text — never guess.** Size each `<rect>` width to the longest label it contains. Default to ≥ 200px for any box with a function name, SQL keyword, or long token (e.g., `SYSTEM$STREAM_HAS_DATA()`). Add at least 24px total horizontal padding. Expand the SVG `viewBox` width to match — never let a box clip its label. For single-column flow diagrams, `viewBox="0 0 260 H"` with `cx=130` is a safe default.
 
----
-
-## Stopping Points
-
-- ✋ Step 1: After gathering content, confirm slide count and key points with user
-- ✋ Step 2: After presenting slide plan, get explicit approval before building
-- ✋ Step 5: After verifying, fix any issues before presenting to user
 - ✋ Step 6: After presenting the deck, wait for user feedback before iterating

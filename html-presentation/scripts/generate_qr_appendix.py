@@ -17,15 +17,19 @@ Usage::
 """
 
 import argparse
+import ipaddress
 import os
 import re
+import socket
 import sys
 import tempfile
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import escape, unescape
 from io import BytesIO
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.parse import urlparse, urlunparse
+from urllib.request import build_opener, HTTPRedirectHandler, Request
 
 try:
     import segno
@@ -37,8 +41,13 @@ except ImportError:
     )
     sys.exit(1)
 
+MAX_FETCH_WORKERS = 8
+_TITLE_FETCH_CHUNK_BYTES = 32_768
+_TITLE_FETCH_TIMEOUT_S = 3
+_MAX_DECK_FILE_BYTES = 10 * 1024 * 1024
+
 LINK_RE = re.compile(
-    r'<a\s[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>',
+    r'<a\s[^>]*href=(?:"(https?://[^"]+)"|\'(https?://[^\']+)\')[^>]*>(.*?)</a>',
     re.IGNORECASE | re.DOTALL,
 )
 TAG_RE = re.compile(r'<[^>]+>')
@@ -61,9 +70,32 @@ _QR_HEIGHT_ATTR_RE = re.compile(r'\bheight="[^"]*"')
 _QR_SVG_OPEN_TAG_RE = re.compile(r'<svg\b([^>]*)>')
 _APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
 _SLIDE_TOTAL_RE = re.compile(r'<span\s+id="total">(\d+)</span>')
+_APPENDIX_BLOCK_RE = re.compile(
+    r'<!-- Slide \d+: Links \(Appendix\) -->',
+    re.IGNORECASE,
+)
+
+_PRIVATE_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+)
 
 
-def extract_links(html: str) -> list[tuple[str, str]]:
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "Redirect blocked (SSRF guard)", headers, fp)
+
+
+_SAFE_OPENER = build_opener(_NoRedirect())
+
+
+def extract_links(html: str, fetch_titles: bool = False) -> list[tuple[str, str]]:
     """Return deduplicated (url, title) pairs in document order.
 
     Title resolution priority:
@@ -78,20 +110,22 @@ def extract_links(html: str) -> list[tuple[str, str]]:
     needs_fetch: list[str] = []
 
     for m in LINK_RE.finditer(html):
-        url = m.group(1)
+        url = m.group(1) or m.group(2)
         if url in seen:
             continue
         seen.add(url)
-        raw_text = TAG_RE.sub('', m.group(2)).strip()
+        raw_text = TAG_RE.sub('', m.group(3)).strip()
         if raw_text and not _looks_like_url(raw_text):
             ordered.append((url, raw_text))
         else:
             ordered.append((url, None))
-            needs_fetch.append(url)
+            if fetch_titles:
+                needs_fetch.append(url)
 
-    if needs_fetch:
+    if fetch_titles and needs_fetch:
+        print(f"Fetching titles for {len(needs_fetch)} URL(s)...", file=sys.stderr)
         fetched: dict[str, str | None] = {}
-        with ThreadPoolExecutor(max_workers=min(len(needs_fetch), 8)) as pool:
+        with ThreadPoolExecutor(max_workers=min(len(needs_fetch), MAX_FETCH_WORKERS)) as pool:
             future_to_url = {pool.submit(_fetch_page_title, url): url for url in needs_fetch}
             for future in as_completed(future_to_url):
                 url = future_to_url[future]
@@ -122,9 +156,29 @@ def _looks_like_url(text: str) -> bool:
 
 def _fetch_page_title(url: str) -> str | None:
     """Best-effort fetch of the remote ``<title>`` tag (3 s timeout)."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        return None
+    # Single resolution — reuse same IP for both check and connect
     try:
-        with urlopen(url, timeout=3) as resp:  # noqa: S310
-            chunk = resp.read(32_768).decode('utf-8', errors='replace')
+        resolved_ip = socket.gethostbyname(hostname)
+    except socket.gaierror:
+        return None
+    ip_obj = ipaddress.ip_address(resolved_ip)
+    if any(ip_obj in net for net in _PRIVATE_NETWORKS):
+        return None
+    # Build a URL pointing at the resolved IP directly; pass Host header
+    port = parsed.port
+    netloc_ip = (
+        f"[{resolved_ip}]:{port}" if ":" in resolved_ip
+        else (f"{resolved_ip}:{port}" if port else resolved_ip)
+    )
+    ip_url = urlunparse(parsed._replace(netloc=netloc_ip))
+    req = Request(ip_url, headers={"Host": hostname, "User-Agent": "Mozilla/5.0"})
+    try:
+        with _SAFE_OPENER.open(req, timeout=_TITLE_FETCH_TIMEOUT_S) as resp:
+            chunk = resp.read(_TITLE_FETCH_CHUNK_BYTES).decode('utf-8', errors='replace')
         m = PAGE_TITLE_RE.search(chunk)
         if m:
             return unescape(m.group(1)).strip()
@@ -138,7 +192,8 @@ def _title_from_url(url: str) -> str:
     path = _HTTP_PREFIX_RE.sub('', url).rstrip('/')
     last_segment = path.rsplit('/', 1)[-1] if '/' in path else path
     last_segment = _SLUG_SEP_RE.sub(' ', last_segment)
-    return last_segment.title() if last_segment else path
+    name = last_segment.removeprefix("www.")
+    return name or url
 
 
 def extract_accent(html: str) -> str:
@@ -147,7 +202,7 @@ def extract_accent(html: str) -> str:
     return m.group(1) if m else "#29B5E8"
 
 
-def make_qr_svg(url: str) -> str:
+def make_qr_svg(url: str) -> str | None:
     """Generate an inline SVG string for *url* using segno.
 
     QR codes use black modules on a white background for maximum
@@ -158,7 +213,17 @@ def make_qr_svg(url: str) -> str:
     ``viewBox``, then replace width/height with 100% so the code
     fills whatever container it's placed in.
     """
-    qr = segno.make(url)
+    if len(url.encode()) > 2953:
+        print(
+            f"Warning: URL too long for QR generation ({len(url.encode())} bytes): {url!r}",
+            file=sys.stderr,
+        )
+        return None
+    try:
+        qr = segno.make(url)
+    except Exception as exc:
+        print(f"Warning: QR generation failed for {url!r}: {exc}", file=sys.stderr)
+        return None
     buf = BytesIO()
     qr.save(
         buf,
@@ -172,10 +237,13 @@ def make_qr_svg(url: str) -> str:
     svg = buf.getvalue().decode("utf-8")
     w_match = _QR_WIDTH_RE.search(svg)
     h_match = _QR_HEIGHT_RE.search(svg)
-    vb_w = w_match.group(1) if w_match else "33"
-    vb_h = h_match.group(1) if h_match else "33"
-    svg = _QR_WIDTH_ATTR_RE.sub("", svg, count=1)
-    svg = _QR_HEIGHT_ATTR_RE.sub("", svg, count=1)
+    vb_w = w_match.group(1) if w_match else "33"  # 33 is segno's minimum QR module size (1-M, border=0)
+    vb_h = h_match.group(1) if h_match else "33"  # 33 is segno's minimum QR module size (1-M, border=0)
+    if not _QR_SVG_OPEN_TAG_RE.search(svg):
+        print(f"Warning: malformed SVG from segno for {url!r}", file=sys.stderr)
+        return None
+    svg = _QR_WIDTH_ATTR_RE.sub("", svg)
+    svg = _QR_HEIGHT_ATTR_RE.sub("", svg)
     svg = _QR_SVG_OPEN_TAG_RE.sub(
         rf'<svg\1 viewBox="0 0 {vb_w} {vb_h}" width="100%" height="100%" style="display:block;border-radius:8px;">',
         svg,
@@ -190,11 +258,18 @@ QR_PER_SLIDE = 6
 def build_appendix_slide(
     links: list[tuple[str, str]], slide_num: int,
     page_label: str = "",
-) -> str:
-    """Build the full HTML for one appendix slide (max QR_PER_SLIDE links)."""
+) -> tuple[str, int] | None:
+    """Build the full HTML for one appendix slide (max QR_PER_SLIDE links).
+
+    Returns a ``(slide_html, card_count)`` tuple, or ``None`` if every QR code
+    in this chunk failed to generate.
+    """
     cards: list[str] = []
     for url, title in links:
         svg = make_qr_svg(url)
+        if svg is None:
+            print(f"Warning: skipping link {url!r} — QR generation returned None", file=sys.stderr)
+            continue
         card = (
             f'      <div style="background:rgba(255,255,255,0.04);border-radius:16px;'
             f'padding:24px;text-align:center;width:260px;">\n'
@@ -208,6 +283,9 @@ def build_appendix_slide(
             f"      </div>"
         )
         cards.append(card)
+
+    if not cards:
+        return None
 
     cards_html = "\n".join(cards)
     heading = f"Resources{page_label}"
@@ -228,7 +306,7 @@ def build_appendix_slide(
         f"this presentation.</div>\n"
         f"</div>\n"
     )
-    return slide
+    return slide, len(cards)
 
 
 def remove_existing_appendix(html: str) -> tuple[str, int]:
@@ -243,6 +321,12 @@ def remove_existing_appendix(html: str) -> tuple[str, int]:
     Returns:
         A tuple of (cleaned_html, slides_removed).
     """
+    if len(html.encode('utf-8')) > _MAX_DECK_FILE_BYTES:
+        print(
+            "Warning: file exceeds 10 MB; skipping appendix removal regex to avoid ReDoS.",
+            file=sys.stderr,
+        )
+        return html, 0
     html, removed_count = APPENDIX_SLIDE_RE.subn("", html)
     return html, removed_count
 
@@ -250,6 +334,8 @@ def remove_existing_appendix(html: str) -> tuple[str, int]:
 def find_last_slide_num(html: str) -> int:
     """Return the highest numeric slide ID found in the deck."""
     nums = [int(m.group(1)) for m in SLIDE_ID_RE.finditer(html)]
+    if not nums and html.strip():
+        print("Warning: no slide IDs found in non-empty deck.", file=sys.stderr)
     return max(nums) if nums else 0
 
 
@@ -262,6 +348,10 @@ def main() -> None:
         "--force", action="store_true",
         help="Remove and regenerate any existing QR appendix slide(s)"
     )
+    parser.add_argument(
+        "--fetch-titles", action="store_true",
+        help="Fetch page titles from remote URLs (makes HTTP requests)"
+    )
     args = parser.parse_args()
 
     html_path = Path(args.html_file).resolve()
@@ -271,7 +361,7 @@ def main() -> None:
 
     html = html_path.read_text(encoding="utf-8")
 
-    links = extract_links(html)
+    links = extract_links(html, fetch_titles=args.fetch_titles)
     if not links:
         print("No external links found — nothing to do.", file=sys.stderr)
         sys.exit(0)
@@ -296,11 +386,20 @@ def main() -> None:
     chunks = [links[i:i + QR_PER_SLIDE] for i in range(0, len(links), QR_PER_SLIDE)]
     total_pages = len(chunks)
 
-    all_slides_html = ""
+    slides_parts: list[str] = []
+    actual_slides = 0
+    actual_cards = 0
     for page_idx, chunk in enumerate(chunks):
-        slide_num = last_num + 1 + page_idx
+        slide_num = last_num + 1 + actual_slides
         page_label = f" ({page_idx + 1}/{total_pages})" if total_pages > 1 else ""
-        all_slides_html += build_appendix_slide(chunk, slide_num, page_label)
+        result = build_appendix_slide(chunk, slide_num, page_label)
+        if result is None:
+            continue
+        slide_html, card_count = result
+        slides_parts.append(slide_html)
+        actual_slides += 1
+        actual_cards += card_count
+    all_slides_html = ''.join(slides_parts)
 
     counter_match = COUNTER_RE.search(html)
     if not counter_match:
@@ -312,7 +411,7 @@ def main() -> None:
 
     total_match = _SLIDE_TOTAL_RE.search(html)
     current_total = int(total_match.group(1)) if total_match else last_num
-    new_total = current_total + total_pages
+    new_total = current_total + actual_slides
     html = TOTAL_RE.sub(rf"\g<1>{new_total}\2", html)
 
     tmp_fd, tmp_path = None, None
@@ -339,9 +438,9 @@ def main() -> None:
         print(f"Error: Could not write '{html_path}': {exc}", file=sys.stderr)
         sys.exit(1)
     print(
-        f"Added {total_pages} QR appendix slide(s) "
-        f"(s{last_num + 1}{'–s' + str(new_total) if total_pages > 1 else ''}) "
-        f"with {len(links)} QR code(s).",
+        f"Added {actual_slides} QR appendix slide(s) "
+        f"(s{last_num + 1}{'–s' + str(new_total) if actual_slides > 1 else ''}) "
+        f"with {actual_cards} QR code(s).",
         file=sys.stderr,
     )
     for url, title in links:

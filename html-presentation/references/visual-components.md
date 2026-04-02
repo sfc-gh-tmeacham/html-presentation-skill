@@ -385,3 +385,36 @@ Use for: tech stacks, product feature tags, supported platforms, skill sets.
 ```
 
 Use the accent-tinted style for primary/highlighted tags and the neutral `rgba(255,255,255,0.06)` style for secondary tags. Optionally include a leading Material Icon inside the badge for visual variety.
+
+---
+
+## Presenter Slide
+
+Use for the optional presenter slide immediately after the Title slide. See SKILL.md for layout rules by presenter count (1 = centered, 2 = side-by-side, 3+ = card grid).
+
+**Single presenter:**
+```html
+<h3 class="anim">Presented By</h3>
+<div class="anim" style="display:flex;flex-direction:column;align-items:center;gap:16px;transition-delay:0.1s;">
+  <img src="data:image/png;base64,..." alt="Presenter Name"
+    style="width:clamp(100px,12vmin,160px);height:clamp(100px,12vmin,160px);border-radius:50%;object-fit:cover;border:3px solid var(--accent);">
+  <div style="text-align:center;">
+    <h4 style="font-size:clamp(1.5rem,2.5vw,2.25rem);margin-bottom:0.25rem;">Presenter Name</h4>
+    <p style="font-size:clamp(1rem,1.5vw,1.5rem);color:var(--secondary);">Title / Role</p>
+  </div>
+</div>
+```
+
+**Multiple presenters (2-column shown; adjust `repeat(N,1fr)` for 3+):**
+```html
+<h3 class="anim">Your Presenters</h3>
+<div class="card-grid anim stagger" style="grid-template-columns:repeat(2,1fr);gap:24px;transition-delay:0.1s;">
+  <div class="card" style="text-align:center;padding:28px 24px;">
+    <img src="data:image/png;base64,..." alt="Name"
+      style="width:clamp(80px,10vmin,140px);height:clamp(80px,10vmin,140px);border-radius:50%;object-fit:cover;border:3px solid var(--accent);margin-bottom:0.75rem;">
+    <h4 style="font-size:clamp(1.1rem,2vw,1.5rem);margin-bottom:0.25rem;">Presenter Name</h4>
+    <p style="font-size:clamp(0.875rem,1.3vw,1.125rem);color:var(--secondary);">Title / Role</p>
+  </div>
+  <!-- repeat for each presenter -->
+</div>
+```

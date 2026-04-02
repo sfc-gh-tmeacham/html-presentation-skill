@@ -25,6 +25,7 @@ Examples::
 """
 
 import argparse
+import contextlib
 import os
 import re
 import sys
@@ -36,6 +37,9 @@ from pathlib import Path
 # regex processing.
 MAX_SVG_SIZE_BYTES: int = 10 * 1024 * 1024
 
+# Number of bytes to scan when checking for the <svg> tag.
+_SVG_TAG_SCAN_BYTES = 8192
+
 # Regex patterns for entire elements that should be removed.  Each pattern
 # uses DOTALL so `.*?` can span newlines inside the element.
 STRIP_ELEMENTS: list[str] = [
@@ -45,7 +49,7 @@ STRIP_ELEMENTS: list[str] = [
     r"<sodipodi:namedview\s*/>",                # Self-closing variant
     r"<namedview[\s>].*?</namedview>",          # Generic named-view variant
     r"<namedview\s*/>",                         # Self-closing variant
-    r"<defs>\s*</defs>",                        # Empty <defs> wrappers (no actual defs)
+    r"<defs[^>]*>\s*</defs>",                   # Empty <defs> wrappers (no actual defs)
     r"<defs\s*/>",                              # Self-closing: <defs/> and <defs />
     r"<!--.*?-->",                              # All XML/HTML comments
 ]
@@ -54,26 +58,26 @@ STRIP_ELEMENTS: list[str] = [
 # Each pattern starts with \s+ to also consume the leading whitespace.
 STRIP_ATTRS: list[str] = [
     # Editor namespace declarations (double or single quoted)
-    "\\s+xmlns:inkscape=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+xmlns:sodipodi=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+xmlns:sketch=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+xmlns:dc=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+xmlns:cc=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+xmlns:rdf=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+xmlns:inkscape=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+xmlns:sodipodi=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+xmlns:sketch=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+xmlns:dc=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+xmlns:cc=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+xmlns:rdf=(?:\"[^\"]*\"|'[^']*')",
     # Editor-specific per-element attributes
-    "\\s+inkscape:[a-z\\-]+=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+sodipodi:[a-z\\-]+=(?:\"[^\"]*\"|'[^']*')",
-    "\\s+sketch:[a-z\\-]+=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+inkscape:[a-zA-Z0-9_\-]+=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+sodipodi:[a-zA-Z0-9_\-]+=(?:\"[^\"]*\"|'[^']*')",
+    r"\s+sketch:[a-zA-Z0-9_\-]+=(?:\"[^\"]*\"|'[^']*')",
     # Miscellaneous noise
-    "\\s+xml:space=(?:\"[^\"]*\"|'[^']*')",    # Redundant whitespace-handling hint
-    "\\s+data-name=(?:\"[^\"]*\"|'[^']*')",    # Design-tool layer names
+    r"\s+xml:space=(?:\"[^\"]*\"|'[^']*')",    # Redundant whitespace-handling hint
+    r"\s+data-name=(?:\"[^\"]*\"|'[^']*')",    # Design-tool layer names
 ]
 
 # Pre-compiled versions of the above patterns for efficient repeated use.
-_STRIP_ELEMENTS_RE: list[re.Pattern] = [
+_STRIP_ELEMENTS_RE: list[re.Pattern[str]] = [
     re.compile(p, re.DOTALL | re.IGNORECASE) for p in STRIP_ELEMENTS
 ]
-_STRIP_ATTRS_RE: list[re.Pattern] = [
+_STRIP_ATTRS_RE: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE) for p in STRIP_ATTRS
 ]
 
@@ -88,38 +92,31 @@ def validate_input(input_path: Path) -> None:
         input_path: Path to the source SVG.
 
     Raises:
-        SystemExit: If the file is missing, not a file, not an SVG, empty,
+        ValueError: If the file is missing, not a file, not an SVG, empty,
             or exceeds the size limit.
     """
     if not input_path.exists():
-        print(f"Error: '{input_path}' not found.", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"Error: '{input_path}' not found.")
 
     if not input_path.is_file():
-        print(f"Error: '{input_path}' is not a regular file.", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"Error: '{input_path}' is not a regular file.")
 
     if input_path.suffix.lower() != ".svg":
-        print(
+        raise ValueError(
             f"Error: Expected an .svg file, got '{input_path.suffix}'.  "
-            f"This tool only processes SVG files.",
-            file=sys.stderr,
+            f"This tool only processes SVG files."
         )
-        sys.exit(1)
 
     size = input_path.stat().st_size
     if size == 0:
-        print(f"Error: '{input_path}' is empty (0 bytes).", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"Error: '{input_path}' is empty (0 bytes).")
 
     if size > MAX_SVG_SIZE_BYTES:
         mb = size / (1024 * 1024)
-        print(
+        raise ValueError(
             f"Error: '{input_path}' is {mb:.1f} MB — exceeds the "
-            f"{MAX_SVG_SIZE_BYTES // (1024 * 1024)} MB limit.",
-            file=sys.stderr,
+            f"{MAX_SVG_SIZE_BYTES // (1024 * 1024)} MB limit."
         )
-        sys.exit(1)
 
 
 def validate_svg_content(content: str, input_path: Path) -> None:
@@ -130,15 +127,13 @@ def validate_svg_content(content: str, input_path: Path) -> None:
         input_path: Path to the file (for error messages).
 
     Raises:
-        SystemExit: If the content does not contain an ``<svg`` tag.
+        ValueError: If the content does not contain an ``<svg`` tag.
     """
-    if "<svg" not in content.lower():
-        print(
+    if "<svg" not in content[:_SVG_TAG_SCAN_BYTES].lower():
+        raise ValueError(
             f"Error: '{input_path}' does not appear to contain SVG content "
-            f"(no <svg> tag found).",
-            file=sys.stderr,
+            f"(no <svg> tag found)."
         )
-        sys.exit(1)
 
 
 def optimize_svg(content: str) -> str:
@@ -150,8 +145,7 @@ def optimize_svg(content: str) -> str:
 
     Finally collapses excessive blank lines and trailing whitespace.
 
-    If a regex pattern fails (e.g. due to unusual encoding), that pattern
-    is skipped with a warning rather than aborting the whole optimization.
+    Patterns are pre-compiled at module load; no per-call error handling is needed.
 
     Args:
         content: Raw SVG source text.
@@ -161,10 +155,12 @@ def optimize_svg(content: str) -> str:
     """
     # Pass 1: Remove whole elements (metadata blocks, comments, empty defs).
     for pattern in _STRIP_ELEMENTS_RE:
+        # Pre-compiled pattern; re.error would only occur at compile time
         content = pattern.sub("", content)
 
     # Pass 2: Remove individual editor-specific attributes from remaining tags.
     for pattern in _STRIP_ATTRS_RE:
+        # Pre-compiled pattern; re.error would only occur at compile time
         content = pattern.sub("", content)
 
     # Collapse runs of 3+ blank lines down to a single blank line.
@@ -179,6 +175,23 @@ def optimize_svg(content: str) -> str:
     return content
 
 
+def _write_atomic(path: Path, content: str) -> None:
+    """Write *content* to *path* atomically using a sibling temp file."""
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=path.parent, prefix=".svgopt_tmp_", suffix=".svg"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.close(tmp_fd)
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+
+
 def main() -> None:
     """Parse CLI arguments, optimize the SVG, and write or print the result."""
     parser = argparse.ArgumentParser(
@@ -188,10 +201,19 @@ def main() -> None:
     parser.add_argument(
         "output", nargs="?", help="Output path (omit to print to stdout)"
     )
+    parser.add_argument("--version", action="version", version="svg_optimize 1.0")
     args = parser.parse_args()
 
     input_path = Path(args.input)
-    validate_input(input_path)
+    try:
+        validate_input(input_path)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
+    if args.output and Path(args.output).resolve() == input_path.resolve():
+        print("Error: input and output paths resolve to the same file.", file=sys.stderr)
+        sys.exit(1)
 
     # Read the source SVG with explicit UTF-8 encoding.
     try:
@@ -207,12 +229,19 @@ def main() -> None:
         print(f"Error: Could not read '{input_path}': {exc}", file=sys.stderr)
         sys.exit(1)
 
-    validate_svg_content(original, input_path)
+    orig_size = len(original.encode("utf-8"))
+
+    try:
+        validate_svg_content(original, input_path)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
     optimized = optimize_svg(original)
 
     # Verify the optimized output still contains the <svg> tag — if our
     # regex accidentally nuked it, fall back to the original content.
-    if "<svg" not in optimized.lower():
+    if "<svg" not in optimized[:_SVG_TAG_SCAN_BYTES].lower():
         print(
             "Warning: Optimization removed the <svg> tag — this is a bug.  "
             "Falling back to the original unmodified SVG.",
@@ -221,7 +250,6 @@ def main() -> None:
         optimized = original
 
     # Calculate size savings for the diagnostics line.
-    orig_size = len(original.encode("utf-8"))
     opt_size = len(optimized.encode("utf-8"))
     pct = ((orig_size - opt_size) / orig_size * 100) if orig_size > 0 else 0
 
@@ -236,27 +264,9 @@ def main() -> None:
             )
             sys.exit(1)
 
-        tmp_fd, tmp_path = None, None
         try:
-            tmp_fd, tmp_path = tempfile.mkstemp(
-                dir=output_path.parent, prefix=".svgopt_tmp_", suffix=".svg"
-            )
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                f.write(optimized)
-            tmp_fd = None
-            os.replace(tmp_path, output_path)
-            tmp_path = None
+            _write_atomic(output_path, optimized)
         except OSError as exc:
-            if tmp_fd is not None:
-                try:
-                    os.close(tmp_fd)
-                except OSError:
-                    pass
-            if tmp_path is not None:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
             print(f"Error: Could not write to '{output_path}': {exc}", file=sys.stderr)
             sys.exit(1)
 
@@ -271,7 +281,7 @@ def main() -> None:
             f"# Optimized: {orig_size:,} → {opt_size:,} bytes ({pct:.1f}% smaller)",
             file=sys.stderr,
         )
-        print(optimized)
+        sys.stdout.write(optimized)
 
 
 if __name__ == "__main__":

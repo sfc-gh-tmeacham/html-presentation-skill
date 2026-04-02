@@ -44,6 +44,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+MAX_FILE_SIZE = 20 * 1024 * 1024
+MAX_WORDS_PER_SLIDE = 30
+MAX_QR_PER_SLIDE = 6
+MIN_SVG_VH = 58
+
 VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r'class="[^"]*card-grid',
     r'class="[^"]*card["\s]',
@@ -82,7 +87,7 @@ SLIDE_ALL_RE = re.compile(
 )
 SLIDE_BLOCK_RE = re.compile(
     r'(<div\b(?=[^>]*\bclass="slide[^"]*")(?=[^>]*\bid="(s[^"]+)")[^>]*>)(.*?)'
-    r'(?=<div\b(?=[^>]*\bclass="slide[\s"])(?=[^>]*\bid="s)|<div\s+class="nav"|</body>)',
+    r'(?=<div\b[^>]*\bclass="slide(?!-)|<div\s+class="nav"|</body>)',
     re.DOTALL | re.IGNORECASE,
 )
 TOTAL_RE = re.compile(r'<span\s+id="total"[^>]*>\s*(\d+)\s*</span>', re.IGNORECASE)
@@ -98,7 +103,7 @@ HTML_TAG_RE = re.compile(r"<[^>]+>")
 NOTES_BLOCK_RE = re.compile(r'<div\s+class="speaker-notes"[^>]*>.*?</div>', re.DOTALL | re.IGNORECASE)
 STYLE_TAG_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
 SCRIPT_TAG_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
-ENTITY_RE = re.compile(r"&\w+;")
+ENTITY_RE = re.compile(r"&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);")
 UL_BLOCK_RE = re.compile(r"<ul([^>]*)>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
 SYMBOL_CHAR_CLASS = (
     r"[\U0001F300-\U0001FAFF\u2300-\u23FF\u2600-\u27BF"
@@ -132,13 +137,54 @@ ANCHOR_REL_RE = re.compile(r'\brel=["\'][^"\']*noopener[^"\']*["\']', re.IGNOREC
 UL_OL_RE = re.compile(r"<(ul|ol)([^>]*)>", re.IGNORECASE)
 TEXT_ALIGN_LEFT_RE = re.compile(r"text-align\s*:\s*left", re.IGNORECASE)
 _CSS_RULE_RE = re.compile(r"([^{}]+)\{([^}]*)\}", re.DOTALL)
-_CSS_CLASS_IN_SELECTOR_RE = re.compile(r"\.([ \w-]+)")
+_CSS_CLASS_IN_SELECTOR_RE = re.compile(r"\.([\w-]+)")
 SVG_CONTAINER_RE = re.compile(
     r'(?:max-height\s*:\s*)([\d.]+)(vh|px)',
     re.IGNORECASE,
 )
 EXTERNAL_LINK_RE = re.compile(r'<a\s[^>]*href="https?://[^"]*"', re.IGNORECASE)
 APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
+APPENDIX_BLOCK_RE = re.compile(
+    r'<!-- Slide \d+: Links \(Appendix\) -->.*?(?=<!-- Slide|<div class="counter"|</body>)',
+    re.DOTALL | re.IGNORECASE,
+)
+QR_SIZE_RE = re.compile(r'width\s*:\s*220px', re.IGNORECASE)
+BASE64_LINE_RE = re.compile(r'src="data:|;base64,', re.IGNORECASE)
+LINE_REF_RE = re.compile(r'\bline (\d+)\b')
+
+MAX_CONTEXT_ISSUES = 10
+MAX_REFS_PER_ISSUE = 2
+
+
+def line_no(html: str, pos: int) -> int:
+    """Return the 1-based line number for a character position in html."""
+    return html[:pos].count('\n') + 1
+
+
+def slide_at(pos: int, slide_map: list[tuple[str, int, int]]) -> str:
+    """Return the slide ID that contains the given character position."""
+    for sid, start, end in slide_map:
+        if start <= pos < end:
+            return sid
+    return "global"
+
+
+def context_snippet(html_lines: list[str], line_num: int, n: int) -> str:
+    """Return ±n lines around line_num (1-based) with base64 content redacted."""
+    start = max(0, line_num - n - 1)
+    end = min(len(html_lines), line_num + n)
+    out = []
+    for i in range(start, end):
+        ln = i + 1
+        raw = html_lines[i]
+        if BASE64_LINE_RE.search(raw):
+            kb = max(1, len(raw.encode()) // 1024)
+            display = f'[base64 data omitted — {kb}kb]'
+        else:
+            display = raw.rstrip()[:120]
+        marker = '→' if ln == line_num else ' '
+        out.append(f"      {marker}{ln:5d}: {display}")
+    return '\n'.join(out)
 
 
 def strip_html(text: str) -> str:
@@ -159,28 +205,40 @@ def has_visual(html_block: str) -> bool:
 
 
 def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
-    html = html_path.read_text(encoding="utf-8")
     passes: list[str] = []
     warns: list[str] = []
     fails: list[str] = []
 
+    if not html_path.is_file():
+        raise FileNotFoundError(f"'{html_path}' not found or is not a file.")
+
+    if html_path.stat().st_size > MAX_FILE_SIZE:
+        warns.append("File exceeds 20 MB — regex performance may degrade")
+
+    html = html_path.read_text(encoding="utf-8")
+
+    # 1. Slide IDs — sequential id="s1", s2, ... with no gaps or dupes
     all_slide_ids = [m.group(1) for m in SLIDE_ALL_RE.finditer(html)]
     numeric_ids = [int(m.group(1)) for m in SLIDE_RE.finditer(html)]
     if not all_slide_ids:
         fails.append("No slides found (expected <div class=\"slide\" id=\"sN\">)")
         return passes, warns, fails
 
-    expected = list(range(1, len(numeric_ids) + 1))
-    if numeric_ids == expected:
-        passes.append(f"Slide IDs: sequential s1–s{len(numeric_ids)}")
+    if not numeric_ids and all_slide_ids:
+        warns.append("Slide IDs: no numeric slide IDs found (e.g. s1, s2) — sequential check skipped")
     else:
-        fails.append(f"Slide IDs not sequential: got {numeric_ids}, expected {expected}")
+        expected = list(range(1, len(numeric_ids) + 1))
+        if numeric_ids == expected:
+            passes.append(f"Slide IDs: sequential s1–s{len(numeric_ids)}")
+        else:
+            fails.append(f"Slide IDs not sequential: got {numeric_ids}, expected {expected}")
 
     if len(numeric_ids) != len(set(numeric_ids)):
         dupes = sorted(k for k, v in Counter(numeric_ids).items() if v > 1)
         fails.append(f"Duplicate slide IDs: {dupes}")
 
-    total_slide_count = len(all_slide_ids)
+    # 2. Total counter — <span id="total"> matches actual slide count
+    total_slide_count = len(numeric_ids)
     total_match = TOTAL_RE.search(html)
     if total_match:
         declared = int(total_match.group(1))
@@ -191,35 +249,52 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
     else:
         warns.append("No <span id=\"total\"> found — slide counter may be missing")
 
-    placeholders = PLACEHOLDER_RE.findall(html)
-    if placeholders:
-        fails.append(f"Orphan placeholders ({len(placeholders)}): {placeholders[:3]}{'...' if len(placeholders) > 3 else ''}")
+    # 3. Orphan placeholders — leftover {{IMG:...}} tokens not yet embedded
+    placeholder_matches = list(PLACEHOLDER_RE.finditer(html))
+    if placeholder_matches:
+        details = [
+            f"{m.group()} at line {line_no(html, m.start())}"
+            for m in placeholder_matches[:3]
+        ]
+        fails.append(
+            f"Orphan placeholders ({len(placeholder_matches)}): {', '.join(details)}"
+            f"{'...' if len(placeholder_matches) > 3 else ''}"
+        )
     else:
         passes.append("No orphan {{IMG:...}} placeholders")
 
+    # 4. Visual component — every slide has at least one visual element
+    # 5. Word count — flags slides exceeding 30 visible words
     slide_blocks = list(SLIDE_BLOCK_RE.finditer(html))
+    slide_map = [(m.group(2), m.start(), m.end()) for m in slide_blocks]
+
+    if not slide_blocks and all_slide_ids:
+        warns.append("Could not extract slide blocks for per-slide checks (unusual HTML structure)")
+
     no_visual: list[str] = []
     over_30: list[tuple[str, int]] = []
-    for m in slide_blocks:
-        sid = m.group(2)
-        block = m.group(3)
-        if not has_visual(block):
-            no_visual.append(sid)
-        wc = count_visible_words(block)
-        if wc > 30:
-            over_30.append((sid, wc))
+    if slide_blocks:
+        for m in slide_blocks:
+            sid = m.group(2)
+            block = m.group(3)
+            if not has_visual(block):
+                no_visual.append(sid)
+            wc = count_visible_words(block)
+            if wc > MAX_WORDS_PER_SLIDE:
+                over_30.append((sid, wc))
 
-    if no_visual:
-        fails.append(f"Slides without visual component: {no_visual}")
-    else:
-        passes.append("All slides have a visual component")
+        if no_visual:
+            fails.append(f"Slides without visual component: {no_visual}")
+        else:
+            passes.append("All slides have a visual component")
 
-    if over_30:
-        details = ", ".join(f"{s}={w}w" for s, w in over_30)
-        warns.append(f"Slides over 30 words: {details}")
-    else:
-        passes.append("All slides within 30-word limit")
+        if over_30:
+            details = ", ".join(f"{s}={w}w" for s, w in over_30)
+            warns.append(f"Slides over {MAX_WORDS_PER_SLIDE} words: {details}")
+        else:
+            passes.append(f"All slides within {MAX_WORDS_PER_SLIDE}-word limit")
 
+    # 6. Speaker notes — if any slide has notes, all should (consistency)
     notes_count = len(SPEAKER_NOTES_RE.findall(html))
     if notes_count == 0:
         passes.append("No speaker notes (consistent)")
@@ -228,25 +303,38 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
     else:
         warns.append(f"Speaker notes on {notes_count}/{total_slide_count} slides (inconsistent)")
 
-    img_tags = IMG_TAG_RE.findall(html)
-    missing_alt = [t[:60] for t in img_tags if not ALT_RE.search(t)]
-    if img_tags and not missing_alt:
-        passes.append(f"All {len(img_tags)} <img> tags have alt attributes")
+    # 7. Accessibility — <img> tags missing alt attribute
+    img_matches = list(IMG_TAG_RE.finditer(html))
+    missing_alt = [(m.group(), m.start()) for m in img_matches if not ALT_RE.search(m.group())]
+    if img_matches and not missing_alt:
+        passes.append(f"All {len(img_matches)} <img> tags have alt attributes")
     elif missing_alt:
-        warns.append(f"{len(missing_alt)} <img> tag(s) missing alt attribute")
+        details = [
+            f"{slide_at(pos, slide_map)} line {line_no(html, pos)}"
+            for _, pos in missing_alt[:3]
+        ]
+        warns.append(
+            f"{len(missing_alt)} <img> tag(s) missing alt attribute: {', '.join(details)}"
+            f"{'...' if len(missing_alt) > 3 else ''}"
+        )
     else:
         passes.append("No <img> tags (nothing to check)")
 
-    if DISPLAY_NONE_SLIDE_RE.search(html):
+    html_no_style = STYLE_TAG_RE.sub("", SCRIPT_TAG_RE.sub("", html))
+
+    # 8. Slide transitions — warns if display:none is used instead of opacity
+    if DISPLAY_NONE_SLIDE_RE.search(html_no_style):
         fails.append("Slide transitions use display:none — should use opacity crossfade")
     else:
         passes.append("Slide transitions use opacity (no display:none)")
 
+    # 9. Reduced motion — checks for prefers-reduced-motion media query
     if REDUCED_MOTION_RE.search(html):
         passes.append("prefers-reduced-motion respected")
     else:
         warns.append("No prefers-reduced-motion media query found")
 
+    # 10. Material Icons — verifies the correct stylesheet URL and class name
     has_icons = MATERIAL_CLASS_RE.search(html)
     if has_icons:
         if MATERIAL_URL_RE.search(html):
@@ -256,26 +344,31 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
     else:
         passes.append("No Material Icons used (nothing to check)")
 
-    has_before_bullets = LI_BEFORE_BULLET_RE.search(html)
-    has_before_suppression = LI_BEFORE_SUPPRESSED_RE.search(html)
-
+    # 11. Double bullets — warns when <li> uses leading symbols/emojis but <ul> missing list-style:none
     double_bullet_lists: list[str] = []
-    for ul_match in UL_BLOCK_RE.finditer(html):
-        ul_attrs = ul_match.group(1)
-        ul_body = ul_match.group(2)
-        if LI_LEADING_SYMBOL_RE.search(ul_body):
-            has_inline_fix = LIST_STYLE_NONE_RE.search(ul_attrs)
-            has_class_fix = NO_BULLET_CLASS_RE.search(ul_attrs)
-            if not has_inline_fix and not has_class_fix:
-                snippet = ul_body.strip()[:80].replace("\n", " ")
-                double_bullet_lists.append(snippet)
-            elif has_before_bullets and not has_class_fix and not has_before_suppression:
-                snippet = ul_body.strip()[:80].replace("\n", " ")
-                double_bullet_lists.append(f"(::before pseudo-bullet) {snippet}")
+    for m in slide_blocks:
+        sid = m.group(2)
+        slide_block = m.group(3)
+        block_start = m.start() + len(m.group(1))
+        has_before_bullets = LI_BEFORE_BULLET_RE.search(slide_block)
+        has_before_suppression = LI_BEFORE_SUPPRESSED_RE.search(slide_block)
+        for ul_match in UL_BLOCK_RE.finditer(slide_block):
+            ul_attrs = ul_match.group(1)
+            ul_body = ul_match.group(2)
+            if LI_LEADING_SYMBOL_RE.search(ul_body):
+                has_inline_fix = LIST_STYLE_NONE_RE.search(ul_attrs)
+                has_class_fix = NO_BULLET_CLASS_RE.search(ul_attrs)
+                ln = line_no(html, block_start + ul_match.start())
+                if not has_inline_fix and not has_class_fix:
+                    snippet = ul_body.strip()[:60].replace("\n", " ")
+                    double_bullet_lists.append(f"{sid} line {ln}: {snippet}")
+                elif has_before_bullets and not has_class_fix and not has_before_suppression:
+                    snippet = ul_body.strip()[:60].replace("\n", " ")
+                    double_bullet_lists.append(f"{sid} line {ln} (::before pseudo-bullet): {snippet}")
     if double_bullet_lists:
         warns.append(
             f"{len(double_bullet_lists)} <ul> with symbol/emoji <li> missing "
-            f"list-style:none — first: {double_bullet_lists[0]}..."
+            f"list-style:none — first: {double_bullet_lists[0]}"
         )
     else:
         passes.append("No double-bullet lists (symbols + default bullets)")
@@ -290,39 +383,42 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         )
     elif external_links and has_appendix:
         passes.append("QR appendix slide present for external links")
-        appendix_blocks = re.findall(
-            r'<!-- Slide \d+: Links \(Appendix\) -->.*?(?=<!-- Slide|<div class="counter"|</body>)',
-            html, re.DOTALL | re.IGNORECASE,
-        )
+        appendix_blocks = APPENDIX_BLOCK_RE.findall(html)
         for i, block in enumerate(appendix_blocks, 1):
-            qr_count = len(re.findall(r'width:220px;height:220px', block))
-            if qr_count > 6:
+            qr_count = len(QR_SIZE_RE.findall(block))
+            if qr_count > MAX_QR_PER_SLIDE:
                 warns.append(
-                    f"QR appendix slide {i} has {qr_count} QR codes (max 6) — "
+                    f"QR appendix slide {i} has {qr_count} QR codes (max {MAX_QR_PER_SLIDE}) — "
                     f"re-run generate_qr_appendix.py to split into multiple slides"
                 )
 
-    # 13. Rule 13 — <a> tags must have target="_blank" and rel="noopener"
-    anchor_tags = ANCHOR_RE.findall(html)
+    # 13. Link attributes — <a> tags must have target="_blank" and rel="noopener"
+    anchor_matches = list(ANCHOR_RE.finditer(html))
     bad_anchors: list[str] = []
-    for tag in anchor_tags:
+    for am in anchor_matches:
+        tag = am.group()
         if not ANCHOR_TARGET_RE.search(tag) or not ANCHOR_REL_RE.search(tag):
-            bad_anchors.append(tag[:80])
+            sid = slide_at(am.start(), slide_map)
+            ln = line_no(html, am.start())
+            bad_anchors.append(f"{sid} line {ln}: {tag[:60]}")
     if bad_anchors:
         warns.append(
-            f"{len(bad_anchors)} <a> tag(s) missing target=\"_blank\" or rel=\"noopener\""
+            f"{len(bad_anchors)} <a> tag(s) missing target=\"_blank\" or rel=\"noopener\": "
+            f"{bad_anchors[0]}{'  (+{} more)'.format(len(bad_anchors) - 1) if len(bad_anchors) > 1 else ''}"
         )
-    elif anchor_tags:
-        passes.append(f"All {len(anchor_tags)} <a> tag(s) have target=_blank and rel=noopener")
+    elif anchor_matches:
+        passes.append(f"All {len(anchor_matches)} <a> tag(s) have target=_blank and rel=noopener")
 
-    # 14. Rule 12 — <ul>/<ol> with bullets should have text-align:left
+    # 14. List alignment — <ul>/<ol> with bullets should have text-align:left
     # Build a set of CSS class names (and sentinel tags) that provide text-align:left
     # by scanning the <style> block, so class-based alignment isn't a false positive.
     _css_left_classes: set[str] = set()
     _css_left_tags: set[str] = set()
-    style_m = STYLE_TAG_RE.search(html)
-    if style_m:
-        for rule_m in _CSS_RULE_RE.finditer(style_m.group(0)):
+    style_matches = STYLE_TAG_RE.findall(html)
+    for style_block in style_matches:
+        css_content = re.sub(r'<style[^>]*>', '', style_block)
+        css_content = css_content.replace('</style>', '')
+        for rule_m in _CSS_RULE_RE.finditer(css_content):
             if TEXT_ALIGN_LEFT_RE.search(rule_m.group(2)):
                 sel = rule_m.group(1).lower()
                 for cls in _CSS_CLASS_IN_SELECTOR_RE.findall(sel):
@@ -332,41 +428,49 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
                 if "ol" in sel:
                     _css_left_tags.add("ol")
 
-    list_missing_align: int = 0
-    for ul_match in UL_OL_RE.finditer(html):
-        tag = ul_match.group(1).lower()
-        attrs = ul_match.group(2)
-        if TEXT_ALIGN_LEFT_RE.search(attrs):
-            continue
-        if tag in _css_left_tags:
-            continue
-        cls_m = re.search(r'\bclass=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
-        if cls_m and any(c in _css_left_classes for c in cls_m.group(1).split()):
-            continue
-        list_missing_align += 1
+    list_missing_align: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for ul_match in UL_OL_RE.finditer(sb.group(0)):
+            tag = ul_match.group(1).lower()
+            attrs = ul_match.group(2)
+            if TEXT_ALIGN_LEFT_RE.search(attrs):
+                continue
+            if tag in _css_left_tags:
+                continue
+            cls_m = re.search(r'\bclass=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
+            if cls_m and any(c in _css_left_classes for c in cls_m.group(1).split()):
+                continue
+            ln = line_no(html, sb.start() + ul_match.start())
+            list_missing_align.append(f"{sid} line {ln}")
     if list_missing_align:
         warns.append(
-            f"{list_missing_align} <ul>/<ol> element(s) without explicit text-align:left"
+            f"{len(list_missing_align)} <ul>/<ol> element(s) without explicit text-align:left: "
+            f"{', '.join(list_missing_align[:3])}{'...' if len(list_missing_align) > 3 else ''}"
         )
     else:
         passes.append("All <ul>/<ol> elements have text-align:left")
 
-    # 15. Rule 16 — SVG containers should have max-height >= 58vh
-    # Strip <style>/<script> blocks first to avoid false positives from CSS rules.
-    html_no_style = STYLE_TAG_RE.sub("", SCRIPT_TAG_RE.sub("", html))
+    # 15. SVG max-height — SVG containers should have max-height >= 58vh
+    # Search within slide blocks to get slide ID and line number without
+    # position-mapping issues from html_no_style.
     svg_low_height: list[str] = []
-    for m in SVG_CONTAINER_RE.finditer(html_no_style):
-        val = float(m.group(1))
-        unit = m.group(2).lower()
-        if unit == "vh" and val < 58:
-            svg_low_height.append(f"{val}vh")
+    for m in slide_blocks:
+        sid = m.group(2)
+        block_start = m.start() + len(m.group(1))
+        for svg_m in SVG_CONTAINER_RE.finditer(m.group(3)):
+            val = float(svg_m.group(1))
+            unit = svg_m.group(2).lower()
+            if unit == "vh" and val < MIN_SVG_VH:
+                ln = line_no(html, block_start + svg_m.start())
+                svg_low_height.append(f"{sid} line {ln}: {val}vh")
     if svg_low_height:
         warns.append(
-            f"SVG container(s) with max-height below 58vh: {svg_low_height} — "
-            f"increase to at least 58vh to avoid empty slide bands"
+            f"SVG container(s) with max-height below {MIN_SVG_VH}vh: "
+            f"{', '.join(svg_low_height)} — increase to at least {MIN_SVG_VH}vh"
         )
     else:
-        passes.append("SVG container max-height is >= 58vh (or not set via inline style)")
+        passes.append(f"SVG container max-height is >= {MIN_SVG_VH}vh (or not set via inline style)")
 
     return passes, warns, fails
 
@@ -376,6 +480,11 @@ def main() -> None:
         description="Validate a slide deck HTML file against the HTML Presentation skill rules."
     )
     parser.add_argument("html_file", help="Path to the HTML deck file")
+    parser.add_argument(
+        "--context", "-c", type=int, default=0, metavar="N",
+        help="Show ±N lines of context around each warning/failure (base64 redacted). "
+             "Recommended: --context 5. Capped at 10 issues × 2 refs each.",
+    )
     args = parser.parse_args()
 
     html_path = Path(args.html_file)
@@ -383,7 +492,32 @@ def main() -> None:
         print(f"Error: '{html_path}' not found.", file=sys.stderr)
         sys.exit(1)
 
-    passes, warns, fails = validate(html_path)
+    try:
+        passes, warns, fails = validate(html_path)
+    except (UnicodeDecodeError, OSError) as e:
+        print(f"Error reading '{html_path}': {e}", file=sys.stderr)
+        sys.exit(1)
+
+    html_lines: list[str] = []
+    if args.context > 0:
+        html_lines = html_path.read_text(encoding="utf-8").splitlines()
+
+    def print_with_context(messages: list[str], symbol: str, issues_shown: list[int]) -> None:
+        """Print each message and, if context requested and budget allows, its code snippet."""
+        for msg in messages:
+            print(f"    {symbol} {msg}")
+            if args.context > 0 and issues_shown[0] < MAX_CONTEXT_ISSUES:
+                refs = LINE_REF_RE.findall(msg)[:MAX_REFS_PER_ISSUE]
+                for ref in refs:
+                    print(context_snippet(html_lines, int(ref), args.context))
+                    issues_shown[0] += 1
+                    if issues_shown[0] >= MAX_CONTEXT_ISSUES:
+                        remaining = sum(len(LINE_REF_RE.findall(m)) for m in messages)
+                        print(f"\n      ... context limit reached ({MAX_CONTEXT_ISSUES} issues) — "
+                              f"re-run without --context to see all messages")
+                        return
+
+    issues_shown = [0]
 
     if passes:
         print(f"\n  ✓ PASS ({len(passes)})")
@@ -392,13 +526,11 @@ def main() -> None:
 
     if warns:
         print(f"\n  ⚠ WARN ({len(warns)})")
-        for w in warns:
-            print(f"    ⚠ {w}")
+        print_with_context(warns, '⚠', issues_shown)
 
     if fails:
         print(f"\n  ✗ FAIL ({len(fails)})")
-        for f in fails:
-            print(f"    ✗ {f}")
+        print_with_context(fails, '✗', issues_shown)
 
     total = len(passes) + len(warns) + len(fails)
     print(f"\n  {len(passes)}/{total} passed, {len(warns)} warnings, {len(fails)} failures")
