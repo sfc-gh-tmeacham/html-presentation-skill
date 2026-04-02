@@ -1,4 +1,4 @@
-# HTML Presentation
+# Cortex Code CLI HTML Presentation Skill
 
 [![Built with Cortex Code](https://img.shields.io/badge/Built%20with-Cortex%20Code-29B5E8?style=flat&logo=snowflake&logoColor=white)](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code)
 [![Snowflake](https://img.shields.io/badge/Snowflake-29B5E8?style=flat&logo=snowflake&logoColor=white)](https://www.snowflake.com)
