@@ -34,16 +34,6 @@ except ImportError:
     )
     sys.exit(1)
 
-# Maps common raster extensions to their MIME types (unused at runtime since
-# we always output PNG, but kept for potential future format selection).
-MIME_MAP: dict[str, str] = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-}
-
 # Supported raster formats for screenshot processing.
 SUPPORTED_EXTENSIONS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 
@@ -150,7 +140,10 @@ def auto_crop(img: Image.Image, fuzz: int = 15) -> Image.Image:
         # Compute per-pixel difference, convert to grayscale, then threshold.
         diff = ImageChops.difference(img, bg)
         diff = diff.convert("L")
-        diff = diff.point(lambda x: 0 if x < fuzz else 255)
+        # Build a threshold lookup table once: values below fuzz map to 0
+        # (border), values at or above map to 255 (content).
+        lut = [0 if x < fuzz else 255 for x in range(256)]
+        diff = diff.point(lut)
 
         # getbbox() returns the bounding box of all non-zero pixels.
         bbox = diff.getbbox()

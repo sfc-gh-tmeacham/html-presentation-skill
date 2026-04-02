@@ -71,7 +71,7 @@ def validate_input(file_path: Path) -> None:
         sys.exit(1)
 
 
-def img_to_base64(file_path: str) -> str:
+def img_to_base64(file_path: Path) -> str:
     """Convert an image file to a base64 data URI.
 
     Args:
@@ -84,14 +84,12 @@ def img_to_base64(file_path: str) -> str:
     Raises:
         SystemExit: If the file cannot be read or encoded.
     """
-    p = Path(file_path)
-
     # Determine the MIME type — prefer our explicit map, fall back to the
     # standard library's guess, and default to a generic binary type.
-    ext = p.suffix.lower()
+    ext = file_path.suffix.lower()
     mime = (
         MIME_OVERRIDES.get(ext)
-        or mimetypes.guess_type(file_path)[0]
+        or mimetypes.guess_type(str(file_path))[0]
         or "application/octet-stream"
     )
 
@@ -106,16 +104,14 @@ def img_to_base64(file_path: str) -> str:
 
     # Read raw bytes and encode to base64 ASCII.
     try:
-        with open(p, "rb") as f:
-            raw = f.read()
+        raw = file_path.read_bytes()
     except OSError as exc:
         print(f"Error: Could not read '{file_path}': {exc}", file=sys.stderr)
         sys.exit(1)
 
     try:
         encoded = base64.b64encode(raw).decode("ascii")
-    except Exception as exc:
-        # Extremely unlikely, but guard against memory or encoding issues.
+    except (MemoryError, Exception) as exc:
         print(f"Error: Base64 encoding failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -131,7 +127,7 @@ def main() -> None:
     p = Path(sys.argv[1])
     validate_input(p)
 
-    uri = img_to_base64(sys.argv[1])
+    uri = img_to_base64(p)
 
     # Sanity check: a valid data URI should start with "data:" and contain
     # base64 content after the comma.

@@ -40,7 +40,7 @@ HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})
 # Maps named colors to all their common hex/rgb representations so we can
 # find and replace every variant in a single pass.
 COLOR_ALIASES: dict[str, list[str]] = {
-    "black": ["#000", "#000000", "#0", "rgb(0,0,0)", "rgb(0, 0, 0)"],
+    "black": ["#000", "#000000", "rgb(0,0,0)", "rgb(0, 0, 0)"],
     "white": ["#fff", "#ffffff", "rgb(255,255,255)", "rgb(255, 255, 255)"],
 }
 
@@ -48,7 +48,6 @@ COLOR_ALIASES: dict[str, list[str]] = {
 HEX_EXPAND: dict[str, str] = {
     "#000": "#000000",
     "#fff": "#ffffff",
-    "#FFF": "#FFFFFF",
 }
 
 # Maximum SVG file size we'll process (10 MB).
@@ -201,25 +200,34 @@ def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
     # Property names to target for color replacement.
     properties = ["fill", "stroke", "stop-color"]
 
+    # Pre-compile all (variant × property) patterns before iterating.
+    compiled: list[tuple[re.Pattern, str]] = []
     for variant in from_variants:
         escaped = re.escape(variant)
-
         for prop in properties:
             try:
-                pattern = re.compile(
-                    rf'({re.escape(prop)}\s*[:=]\s*["\']?){escaped}(["\']?\s*[;\}}]?)',
-                    re.IGNORECASE,
-                )
-                svg_content, n = pattern.subn(
-                    rf'\g<1>{to_color}\2', svg_content
-                )
-                count += n
+                compiled.append((
+                    re.compile(
+                        rf'({re.escape(prop)}\s*[:=]\s*["\']?){escaped}(["\']?\s*[;\}}]?)',
+                        re.IGNORECASE,
+                    ),
+                    prop,
+                ))
             except re.error as exc:
-                # Log and continue — partial replacement is better than none.
                 print(
                     f"Warning: Regex failed for {prop}='{variant}': {exc}",
                     file=sys.stderr,
                 )
+
+    for pattern, _prop in compiled:
+        try:
+            svg_content, n = pattern.subn(rf'\g<1>{to_color}\2', svg_content)
+            count += n
+        except re.error as exc:
+            print(
+                f"Warning: Substitution failed for pattern '{pattern.pattern[:40]}': {exc}",
+                file=sys.stderr,
+            )
 
     if count == 0:
         print(

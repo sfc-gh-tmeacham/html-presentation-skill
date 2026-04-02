@@ -24,6 +24,7 @@ Examples::
     python svg_optimize.py icon.svg | scripts/img_to_base64.py /dev/stdin
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -62,6 +63,17 @@ STRIP_ATTRS: list[str] = [
     r'\s+xml:space="[^"]*"',                    # Redundant whitespace-handling hint
     r'\s+data-name="[^"]*"',                    # Design-tool layer names
 ]
+
+# Pre-compiled versions of the above patterns for efficient repeated use.
+_STRIP_ELEMENTS_RE: list[re.Pattern] = [
+    re.compile(p, re.DOTALL | re.IGNORECASE) for p in STRIP_ELEMENTS
+]
+_STRIP_ATTRS_RE: list[re.Pattern] = [
+    re.compile(p, re.IGNORECASE) for p in STRIP_ATTRS
+]
+
+_BLANK_LINES_RE = re.compile(r"\n{3,}")
+_TRAILING_WS_RE = re.compile(r"[ \t]+\n")
 
 
 def validate_input(input_path: Path) -> None:
@@ -143,31 +155,30 @@ def optimize_svg(content: str) -> str:
         The optimized SVG source text.
     """
     # Pass 1: Remove whole elements (metadata blocks, comments, empty defs).
-    for pattern in STRIP_ELEMENTS:
+    for pattern in _STRIP_ELEMENTS_RE:
         try:
-            content = re.sub(pattern, "", content, flags=re.DOTALL | re.IGNORECASE)
+            content = pattern.sub("", content)
         except re.error as exc:
-            # Log and skip — partial optimization is better than none.
             print(
-                f"Warning: Regex failed for element pattern '{pattern[:40]}...': {exc}",
+                f"Warning: Regex failed for element pattern '{pattern.pattern[:40]}...': {exc}",
                 file=sys.stderr,
             )
 
     # Pass 2: Remove individual editor-specific attributes from remaining tags.
-    for pattern in STRIP_ATTRS:
+    for pattern in _STRIP_ATTRS_RE:
         try:
-            content = re.sub(pattern, "", content, flags=re.IGNORECASE)
+            content = pattern.sub("", content)
         except re.error as exc:
             print(
-                f"Warning: Regex failed for attribute pattern '{pattern[:40]}...': {exc}",
+                f"Warning: Regex failed for attribute pattern '{pattern.pattern[:40]}...': {exc}",
                 file=sys.stderr,
             )
 
     # Collapse runs of 3+ blank lines down to a single blank line.
-    content = re.sub(r"\n{3,}", "\n\n", content)
+    content = _BLANK_LINES_RE.sub("\n\n", content)
 
     # Strip trailing spaces/tabs on each line.
-    content = re.sub(r"[ \t]+\n", "\n", content)
+    content = _TRAILING_WS_RE.sub("\n", content)
 
     # Ensure the file ends with exactly one newline.
     content = content.strip() + "\n"
@@ -177,11 +188,16 @@ def optimize_svg(content: str) -> str:
 
 def main() -> None:
     """Parse CLI arguments, optimize the SVG, and write or print the result."""
-    if len(sys.argv) < 2:
-        print("Usage: svg_optimize.py <input.svg> [output.svg]", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Optimize an SVG by stripping editor metadata and attributes."
+    )
+    parser.add_argument("input", help="Path to the source SVG")
+    parser.add_argument(
+        "output", nargs="?", help="Output path (omit to print to stdout)"
+    )
+    args = parser.parse_args()
 
-    input_path = Path(sys.argv[1])
+    input_path = Path(args.input)
     validate_input(input_path)
 
     # Read the source SVG with explicit UTF-8 encoding.
@@ -216,9 +232,8 @@ def main() -> None:
     opt_size = len(optimized.encode("utf-8"))
     pct = ((orig_size - opt_size) / orig_size * 100) if orig_size > 0 else 0
 
-    if len(sys.argv) >= 3:
-        # Write to the specified output file.
-        output_path = Path(sys.argv[2])
+    if args.output:
+        output_path = Path(args.output)
 
         # Ensure the output directory exists.
         if not output_path.parent.exists():

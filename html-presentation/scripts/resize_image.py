@@ -14,6 +14,7 @@ Example::
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -129,17 +130,17 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800) -> None
     # If the image is already small enough, just copy it to the output path.
     if longest <= max_size:
         try:
-            img.save(output_path)
-        except (OSError, ValueError) as exc:
-            print(f"Error: Could not save to '{output_path}': {exc}", file=sys.stderr)
+            shutil.copy2(input_path, output_path)
+        except (OSError, shutil.Error) as exc:
+            print(f"Error: Could not copy to '{output_path}': {exc}", file=sys.stderr)
             sys.exit(1)
         print(f"Image already within bounds ({w}x{h}). Saved as-is.")
         return
 
     # Calculate the uniform scale factor so the longest side == max_size.
     scale = max_size / longest
-    new_w = int(w * scale)
-    new_h = int(h * scale)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
 
     # Lanczos (a.k.a. ANTIALIAS) produces the sharpest downscale results.
     resized = img.resize((new_w, new_h), Image.LANCZOS)
