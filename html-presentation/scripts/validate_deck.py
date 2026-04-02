@@ -40,9 +40,10 @@ Exit codes:
 
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
-VISUAL_PATTERNS = [
+VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r'class="[^"]*card-grid',
     r'class="[^"]*card["\s]',
     r'class="[^"]*stat-number',
@@ -62,13 +63,13 @@ VISUAL_PATTERNS = [
     r"<svg[\s>]",
     r"<img[\s>]",
     r"<canvas[\s>]",
-    r"class=\"[^\"]*code-block",
-    r"class=\"[^\"]*styled-table",
+    r'class="[^"]*code-block',
+    r'class="[^"]*styled-table',
     r"<pre[\s>]",
     r"linear-gradient",
     r"radial-gradient",
     r"conic-gradient",
-]
+]]
 
 SLIDE_RE = re.compile(r'<div\s+class="slide[^"]*"[^>]*id="s(\d+)"', re.IGNORECASE)
 SLIDE_ALL_RE = re.compile(
@@ -90,6 +91,9 @@ MATERIAL_URL_RE = re.compile(r"fonts\.googleapis\.com/icon\?family=Material\+Ico
 MATERIAL_CLASS_RE = re.compile(r'class="material-icons-round"')
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 NOTES_BLOCK_RE = re.compile(r'<div\s+class="speaker-notes"[^>]*>.*?</div>', re.DOTALL | re.IGNORECASE)
+STYLE_TAG_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
+SCRIPT_TAG_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+ENTITY_RE = re.compile(r"&\w+;")
 UL_BLOCK_RE = re.compile(r"<ul([^>]*)>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
 SYMBOL_CHAR_CLASS = (
     r"[\U0001F300-\U0001FAFF\u2600-\u27BF\u2300-\u23FF\u2700-\u27BF"
@@ -130,24 +134,19 @@ SVG_CONTAINER_RE = re.compile(
 
 def strip_html(text: str) -> str:
     text = NOTES_BLOCK_RE.sub("", text)
-    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = STYLE_TAG_RE.sub("", text)
+    text = SCRIPT_TAG_RE.sub("", text)
     text = HTML_TAG_RE.sub(" ", text)
-    text = re.sub(r"&\w+;", " ", text)
+    text = ENTITY_RE.sub(" ", text)
     return text
 
 
 def count_visible_words(html_block: str) -> int:
-    clean = strip_html(html_block)
-    words = [w for w in clean.split() if len(w) > 0]
-    return len(words)
+    return len(strip_html(html_block).split())
 
 
 def has_visual(html_block: str) -> bool:
-    for pat in VISUAL_PATTERNS:
-        if re.search(pat, html_block, re.IGNORECASE):
-            return True
-    return False
+    return any(pat.search(html_block) for pat in VISUAL_PATTERNS)
 
 
 def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
@@ -169,8 +168,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         fails.append(f"Slide IDs not sequential: got {numeric_ids}, expected {expected}")
 
     if len(numeric_ids) != len(set(numeric_ids)):
-        dupes = [x for x in numeric_ids if numeric_ids.count(x) > 1]
-        fails.append(f"Duplicate slide IDs: {sorted(set(dupes))}")
+        dupes = sorted(k for k, v in Counter(numeric_ids).items() if v > 1)
+        fails.append(f"Duplicate slide IDs: {dupes}")
 
     total_slide_count = len(all_slide_ids)
     total_match = TOTAL_RE.search(html)

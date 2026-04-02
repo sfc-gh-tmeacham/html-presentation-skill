@@ -16,8 +16,11 @@ Usage::
     python run_script.py generate_qr_appendix.py <deck.html>
 """
 
+import argparse
+import os
 import re
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from io import BytesIO
@@ -172,7 +175,7 @@ QR_PER_SLIDE = 6
 
 
 def build_appendix_slide(
-    links: list[tuple[str, str]], accent: str, slide_num: int,
+    links: list[tuple[str, str]], slide_num: int,
     page_label: str = "",
 ) -> str:
     """Build the full HTML for one appendix slide (max QR_PER_SLIDE links)."""
@@ -292,7 +295,7 @@ def main() -> None:
     for page_idx, chunk in enumerate(chunks):
         slide_num = last_num + 1 + page_idx
         page_label = f" ({page_idx + 1}/{total_pages})" if total_pages > 1 else ""
-        all_slides_html += build_appendix_slide(chunk, accent, slide_num, page_label)
+        all_slides_html += build_appendix_slide(chunk, slide_num, page_label)
 
     counter_match = COUNTER_RE.search(html)
     if not counter_match:
@@ -305,7 +308,29 @@ def main() -> None:
     new_total = last_num + total_pages
     html = TOTAL_RE.sub(rf"\g<1>{new_total}\2", html)
 
-    html_path.write_text(html, encoding="utf-8")
+    tmp_fd, tmp_path = None, None
+    try:
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=html_path.parent, prefix=".qr_tmp_", suffix=".html"
+        )
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(html)
+        tmp_fd = None
+        os.replace(tmp_path, html_path)
+        tmp_path = None
+    except Exception as exc:
+        if tmp_fd is not None:
+            try:
+                os.close(tmp_fd)
+            except OSError:
+                pass
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        print(f"Error: Could not write '{html_path}': {exc}", file=sys.stderr)
+        sys.exit(1)
     print(
         f"Added {total_pages} QR appendix slide(s) "
         f"(s{last_num + 1}{'–s' + str(new_total) if total_pages > 1 else ''}) "

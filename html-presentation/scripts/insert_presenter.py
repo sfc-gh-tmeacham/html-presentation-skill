@@ -31,12 +31,12 @@ Examples::
         --name "Bob" --title "CTO"
 """
 
-import argparse
 import base64
 import mimetypes
 import os
 import re
 import sys
+from io import BytesIO
 from pathlib import Path
 
 try:
@@ -71,7 +71,6 @@ def resize_image(path: str, max_size: int = 300) -> bytes:
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), Image.LANCZOS)
 
-    from io import BytesIO
     buf = BytesIO()
     fmt = img.format or "PNG"
     if fmt.upper() == "JPEG":
@@ -184,7 +183,7 @@ def build_presenter_slide(presenters: list[dict]) -> str:
             f'    </div>'
         )
     cards_html = "\n".join(cards)
-    heading = "Your Presenters" if count > 1 else "Presented By"
+    heading = "Your Presenters"
 
     return (
         '<!-- Presenter Slide -->\n'
@@ -273,7 +272,11 @@ def insert_slide(html: str, presenter_html: str) -> str:
         print("Error: Could not find a <!-- Slide N: ... --> comment to insert before.", file=sys.stderr)
         sys.exit(1)
 
-    first_slide_num = int(re.search(r'Slide (\d+)', insertion_comment).group(1))
+    slide_num_match = re.search(r'Slide (\d+)', insertion_comment)
+    if not slide_num_match:
+        print("Error: Could not parse slide number from insertion comment.", file=sys.stderr)
+        sys.exit(1)
+    first_slide_num = int(slide_num_match.group(1))
     max_slide = count_slides(html)
     current_total = find_total_span(html)
 
@@ -380,12 +383,12 @@ def main() -> None:
 
     presenter_html = build_presenter_slide(presenters)
 
-    with open(deck_path) as f:
+    with open(deck_path, encoding="utf-8") as f:
         html = f.read()
 
     html = insert_slide(html, presenter_html)
 
-    with open(deck_path, "w") as f:
+    with open(deck_path, "w", encoding="utf-8") as f:
         f.write(html)
 
     names = ", ".join(p["name"] for p in presenters)

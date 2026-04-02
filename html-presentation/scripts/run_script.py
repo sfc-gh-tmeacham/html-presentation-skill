@@ -243,8 +243,6 @@ def resolve_target(script_name: str) -> Path:
 
 def main() -> None:
     """Parse arguments, ensure venv + deps, and exec the target script."""
-    import shutil as _shutil
-
     reinstall = "--reinstall" in sys.argv
     filtered_argv = [a for a in sys.argv if a != "--reinstall"]
 
@@ -260,9 +258,7 @@ def main() -> None:
 
     if reinstall and VENV_DIR.exists():
         print(f"--reinstall: removing existing venv at {VENV_DIR}...", file=sys.stderr)
-        _shutil.rmtree(str(VENV_DIR))
-        if DEPS_OK_SENTINEL.exists():
-            DEPS_OK_SENTINEL.unlink()
+        shutil.rmtree(str(VENV_DIR))
 
     target_name = filtered_argv[1]
     target_path = resolve_target(target_name)
