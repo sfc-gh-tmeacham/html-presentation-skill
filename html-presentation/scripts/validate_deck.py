@@ -131,6 +131,8 @@ ANCHOR_TARGET_RE = re.compile(r'\btarget=["\']_blank["\']', re.IGNORECASE)
 ANCHOR_REL_RE = re.compile(r'\brel=["\'][^"\']*noopener[^"\']*["\']', re.IGNORECASE)
 UL_OL_RE = re.compile(r"<(ul|ol)([^>]*)>", re.IGNORECASE)
 TEXT_ALIGN_LEFT_RE = re.compile(r"text-align\s*:\s*left", re.IGNORECASE)
+_CSS_RULE_RE = re.compile(r"([^{}]+)\{([^}]*)\}", re.DOTALL)
+_CSS_CLASS_IN_SELECTOR_RE = re.compile(r"\.([ \w-]+)")
 SVG_CONTAINER_RE = re.compile(
     r'(?:max-height\s*:\s*)([\d.]+)(vh|px)',
     re.IGNORECASE,
@@ -314,11 +316,34 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         passes.append(f"All {len(anchor_tags)} <a> tag(s) have target=_blank and rel=noopener")
 
     # 14. Rule 12 — <ul>/<ol> with bullets should have text-align:left
+    # Build a set of CSS class names (and sentinel tags) that provide text-align:left
+    # by scanning the <style> block, so class-based alignment isn't a false positive.
+    _css_left_classes: set[str] = set()
+    _css_left_tags: set[str] = set()
+    style_m = STYLE_TAG_RE.search(html)
+    if style_m:
+        for rule_m in _CSS_RULE_RE.finditer(style_m.group(0)):
+            if TEXT_ALIGN_LEFT_RE.search(rule_m.group(2)):
+                sel = rule_m.group(1).lower()
+                for cls in _CSS_CLASS_IN_SELECTOR_RE.findall(sel):
+                    _css_left_classes.add(cls.strip())
+                if "ul" in sel:
+                    _css_left_tags.add("ul")
+                if "ol" in sel:
+                    _css_left_tags.add("ol")
+
     list_missing_align: int = 0
     for ul_match in UL_OL_RE.finditer(html):
+        tag = ul_match.group(1).lower()
         attrs = ul_match.group(2)
-        if not TEXT_ALIGN_LEFT_RE.search(attrs):
-            list_missing_align += 1
+        if TEXT_ALIGN_LEFT_RE.search(attrs):
+            continue
+        if tag in _css_left_tags:
+            continue
+        cls_m = re.search(r'\bclass=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
+        if cls_m and any(c in _css_left_classes for c in cls_m.group(1).split()):
+            continue
+        list_missing_align += 1
     if list_missing_align:
         warns.append(
             f"{list_missing_align} <ul>/<ol> element(s) without explicit text-align:left"

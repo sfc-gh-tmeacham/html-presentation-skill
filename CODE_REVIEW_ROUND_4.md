@@ -81,7 +81,7 @@
 | 18 | `insert_presenter.py` | ✅ |
 | 19 | `validate_deck.py` | ✅ |
 | 20 | `validate_deck.py` | ✅ |
-| 21 | `validate_deck.py` | ⏭ skipped — requires CSS class parsing |
+| 21 | `validate_deck.py` | ✅ |
 | 22 | `validate_deck.py` | ✅ |
 | 23 | `screenshot_to_slide.py` | ✅ |
 | 24 | `run_script.py` | ✅ |
