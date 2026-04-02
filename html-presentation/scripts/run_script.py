@@ -238,8 +238,13 @@ def resolve_target(script_name: str) -> Path:
 
 def main() -> None:
     """Parse arguments, ensure venv + deps, and exec the target script."""
-    if len(sys.argv) < 2:
-        print("Usage: python run_script.py <script.py> [args...]", file=sys.stderr)
+    import shutil as _shutil
+
+    reinstall = "--reinstall" in sys.argv
+    filtered_argv = [a for a in sys.argv if a != "--reinstall"]
+
+    if len(filtered_argv) < 2:
+        print("Usage: python run_script.py [--reinstall] <script.py> [args...]", file=sys.stderr)
         print("", file=sys.stderr)
         available = list_available_scripts()
         if available:
@@ -248,9 +253,13 @@ def main() -> None:
                 print(f"  {name}", file=sys.stderr)
         sys.exit(1)
 
-    target_name = sys.argv[1]
+    if reinstall and VENV_DIR.exists():
+        print(f"--reinstall: removing existing venv at {VENV_DIR}...", file=sys.stderr)
+        _shutil.rmtree(str(VENV_DIR))
+
+    target_name = filtered_argv[1]
     target_path = resolve_target(target_name)
-    script_args = sys.argv[2:]
+    script_args = filtered_argv[2:]
 
     # Some scripts (img_to_base64.py, svg_optimize.py, color_swap_svg.py) only
     # use the standard library and don't need Pillow.  We still run them inside

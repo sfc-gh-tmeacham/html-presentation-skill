@@ -194,6 +194,27 @@ def build_appendix_slide(
     return slide
 
 
+def remove_existing_appendix(html: str) -> tuple[str, int]:
+    """Remove all existing QR appendix slides and return the cleaned HTML.
+
+    Also returns the number of slides that were removed so the total counter
+    can be adjusted.
+
+    Args:
+        html: The full deck HTML string.
+
+    Returns:
+        A tuple of (cleaned_html, slides_removed).
+    """
+    appendix_slide_re = re.compile(
+        r'\n?<!-- Slide \d+: Links \(Appendix\) -->.*?(?=\n?<!-- Slide|\n?<div\s+class="counter")',
+        re.DOTALL | re.IGNORECASE,
+    )
+    removed_count = len(appendix_slide_re.findall(html))
+    html = appendix_slide_re.sub("", html)
+    return html, removed_count
+
+
 def find_last_slide_num(html: str) -> int:
     """Return the highest numeric slide ID found in the deck."""
     nums = [int(m.group(1)) for m in SLIDE_ID_RE.finditer(html)]
@@ -201,11 +222,18 @@ def find_last_slide_num(html: str) -> int:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: generate_qr_appendix.py <deck.html>", file=sys.stderr)
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Append QR-code appendix slide(s) to an HTML presentation."
+    )
+    parser.add_argument("html_file", help="Path to the HTML deck file")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Remove and regenerate any existing QR appendix slide(s)"
+    )
+    args = parser.parse_args()
 
-    html_path = Path(sys.argv[1]).resolve()
+    html_path = Path(args.html_file).resolve()
     if not html_path.is_file():
         print(f"Error: File not found: {html_path}", file=sys.stderr)
         sys.exit(1)
@@ -221,8 +249,20 @@ def main() -> None:
         r'<!-- Slide \d+: Links \(Appendix\) -->', html
     )
     if existing_appendix:
-        print("QR appendix slide already exists — skipping.", file=sys.stderr)
-        sys.exit(0)
+        if not args.force:
+            print("QR appendix slide already exists — skipping. Use --force to regenerate.", file=sys.stderr)
+            sys.exit(0)
+        print("--force: removing existing QR appendix slide(s)...", file=sys.stderr)
+        html, removed = remove_existing_appendix(html)
+        if removed:
+            current_total_match = TOTAL_RE.search(html)
+            if current_total_match:
+                old_total = int(current_total_match.group(1).replace(
+                    current_total_match.group(1), current_total_match.group(1)
+                ))
+                new_total = old_total - removed
+                html = TOTAL_RE.sub(rf"\g<1>{new_total}\2", html)
+            print(f"  Removed {removed} appendix slide(s).", file=sys.stderr)
 
     accent = extract_accent(html)
     last_num = find_last_slide_num(html)

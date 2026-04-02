@@ -45,6 +45,7 @@ import mimetypes
 import os
 import re
 import sys
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -273,7 +274,20 @@ def main() -> None:
         return
 
     if count > 0:
-        html_path.write_text(html, encoding="utf-8")
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=html_path.parent, prefix=".embed_tmp_", suffix=".html"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(html)
+            os.replace(tmp_path, html_path)
+        except Exception as exc:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            print(f"Error: Could not write '{html_path}': {exc}", file=sys.stderr)
+            sys.exit(1)
 
     kb = total_bytes / 1024
     print(f"Embedded {count} image(s) ({kb:.1f} KB added to HTML).")

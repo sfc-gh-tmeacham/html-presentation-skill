@@ -21,6 +21,12 @@ Checks performed:
    but the parent ``<ul>`` is missing ``list-style: none``
 12. **QR appendix** — warns when the deck has external links but no QR
    appendix slide; also warns if any appendix slide exceeds 6 QR codes
+13. **Link attributes** — warns when ``<a>`` tags are missing
+   ``target="_blank"`` or ``rel="noopener"`` (Rule 13)
+14. **List alignment** — warns when ``<ul>``/``<ol>`` elements are missing
+   ``text-align: left`` (Rule 12)
+15. **SVG max-height** — warns when SVG containers use ``max-height`` below
+   58vh, which causes empty bands on slides (Rule 16)
 
 Usage::
 
@@ -51,7 +57,7 @@ VISUAL_PATTERNS = [
     r'class="[^"]*timeline',
     r'class="[^"]*progress',
     r'class="[^"]*cta-',
-    r'class="[^"]*counter["\s]',
+    r'class="[^"]*animated-counter',
     r'class="[^"]*icon-list',
     r"<svg[\s>]",
     r"<img[\s>]",
@@ -109,6 +115,15 @@ LI_BEFORE_BULLET_RE = re.compile(
 )
 LI_BEFORE_SUPPRESSED_RE = re.compile(
     r"\.no-bullet\s+li\s*::before\s*\{[^}]*display\s*:\s*none",
+    re.IGNORECASE,
+)
+ANCHOR_RE = re.compile(r"<a\s[^>]*href=['\"]https?://[^'\"]+['\"][^>]*>", re.IGNORECASE)
+ANCHOR_TARGET_RE = re.compile(r'\btarget=["\']_blank["\']', re.IGNORECASE)
+ANCHOR_REL_RE = re.compile(r'\brel=["\'][^"\']*noopener[^"\']*["\']', re.IGNORECASE)
+UL_OL_RE = re.compile(r"<(ul|ol)([^>]*)>", re.IGNORECASE)
+TEXT_ALIGN_LEFT_RE = re.compile(r"text-align\s*:\s*left", re.IGNORECASE)
+SVG_CONTAINER_RE = re.compile(
+    r'(?:max-height\s*:\s*)([\d.]+)(vh|px)',
     re.IGNORECASE,
 )
 
@@ -278,6 +293,47 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
                     f"QR appendix slide {i} has {qr_count} QR codes (max 6) — "
                     f"re-run generate_qr_appendix.py to split into multiple slides"
                 )
+
+    # 13. Rule 13 — <a> tags must have target="_blank" and rel="noopener"
+    anchor_tags = ANCHOR_RE.findall(html)
+    bad_anchors: list[str] = []
+    for tag in anchor_tags:
+        if not ANCHOR_TARGET_RE.search(tag) or not ANCHOR_REL_RE.search(tag):
+            bad_anchors.append(tag[:80])
+    if bad_anchors:
+        warns.append(
+            f"{len(bad_anchors)} <a> tag(s) missing target=\"_blank\" or rel=\"noopener\""
+        )
+    elif anchor_tags:
+        passes.append(f"All {len(anchor_tags)} <a> tag(s) have target=_blank and rel=noopener")
+
+    # 14. Rule 12 — <ul>/<ol> with bullets should have text-align:left
+    list_missing_align: int = 0
+    for ul_match in UL_OL_RE.finditer(html):
+        attrs = ul_match.group(2)
+        if not TEXT_ALIGN_LEFT_RE.search(attrs):
+            list_missing_align += 1
+    if list_missing_align:
+        warns.append(
+            f"{list_missing_align} <ul>/<ol> element(s) without explicit text-align:left"
+        )
+    else:
+        passes.append("All <ul>/<ol> elements have text-align:left")
+
+    # 15. Rule 16 — SVG containers should have max-height >= 58vh
+    svg_low_height: list[str] = []
+    for m in SVG_CONTAINER_RE.finditer(html):
+        val = float(m.group(1))
+        unit = m.group(2).lower()
+        if unit == "vh" and val < 58:
+            svg_low_height.append(f"{val}vh")
+    if svg_low_height:
+        warns.append(
+            f"SVG container(s) with max-height below 58vh: {svg_low_height} — "
+            f"increase to at least 58vh to avoid empty slide bands"
+        )
+    else:
+        passes.append("SVG container max-height is >= 58vh (or not set via inline style)")
 
     return passes, warns, fails
 

@@ -283,9 +283,17 @@ def insert_slide(html: str, presenter_html: str) -> str:
     )
 
     for i in range(max_slide, first_slide_num - 1, -1):
-        html = html.replace(f'id="s{i}"', f'id="s{i + 1}"')
+        html = re.sub(
+            rf'(<div\s[^>]*\bid="s){i}(")',
+            rf'\g<1>{i + 1}\2',
+            html,
+        )
 
-    html = html.replace('id="s_presenter"', f'id="s{first_slide_num}"')
+    html = re.sub(
+        r'(<div\s[^>]*\bid=")s_presenter(")',
+        rf'\g<1>s{first_slide_num}\2',
+        html,
+    )
 
     if current_total is not None:
         new_total = current_total + 1
