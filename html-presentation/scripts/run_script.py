@@ -243,8 +243,16 @@ def resolve_target(script_name: str) -> Path:
 
 def main() -> None:
     """Parse arguments, ensure venv + deps, and exec the target script."""
-    reinstall = "--reinstall" in sys.argv
-    filtered_argv = [a for a in sys.argv if a != "--reinstall"]
+    reinstall = False
+    filtered_argv = [sys.argv[0]]
+    remaining = sys.argv[1:]
+    for i, arg in enumerate(remaining):
+        if arg == "--reinstall":
+            reinstall = True
+        else:
+            filtered_argv.append(arg)
+            filtered_argv.extend(remaining[i + 1:])
+            break
 
     if len(filtered_argv) < 2:
         print("Usage: python run_script.py [--reinstall] <script.py> [args...]", file=sys.stderr)
@@ -281,7 +289,11 @@ def main() -> None:
         sys.exit(result.returncode)
     else:
         # Replace the current process entirely — no zombie wrapper process.
-        os.execv(venv_python, cmd)
+        try:
+            os.execv(venv_python, cmd)
+        except OSError as exc:
+            print(f"Error: Could not execute '{venv_python}': {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -30,8 +30,10 @@ If ``<output>`` is omitted the modified SVG is printed to stdout.
 """
 
 import argparse
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # Regex to validate hex color strings (3, 4, 6, or 8 hex digits).
@@ -168,7 +170,7 @@ def normalize_color(c: str) -> list[str]:
         if short:
             variants.append(short)
 
-    return list(set(v.lower() for v in variants))
+    return list(dict.fromkeys(v.lower() for v in variants))
 
 
 def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
@@ -208,7 +210,7 @@ def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
             try:
                 compiled.append((
                     re.compile(
-                        rf'({re.escape(prop)}\s*[:=]\s*["\']?){escaped}(["\']?\s*[;\}}]?)',
+                        rf'({re.escape(prop)}\s*[:=]\s*["\']?){escaped}(?![0-9a-fA-F])(["\']?\s*[;\}}]?)',
                         re.IGNORECASE,
                     ),
                     prop,
@@ -221,7 +223,7 @@ def swap_colors(svg_content: str, from_color: str, to_color: str) -> str:
 
     for pattern, _prop in compiled:
         try:
-            svg_content, n = pattern.subn(rf'\g<1>{to_color}\2', svg_content)
+            svg_content, n = pattern.subn(lambda m, c=to_color: m.group(1) + c + m.group(2), svg_content)
             count += n
         except re.error as exc:
             print(
@@ -316,9 +318,27 @@ def main() -> None:
             )
             sys.exit(1)
 
+        tmp_fd, tmp_path = None, None
         try:
-            output_path.write_text(result, encoding="utf-8")
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=output_path.parent, prefix=".colorswap_tmp_", suffix=".svg"
+            )
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(result)
+            tmp_fd = None
+            os.replace(tmp_path, output_path)
+            tmp_path = None
         except OSError as exc:
+            if tmp_fd is not None:
+                try:
+                    os.close(tmp_fd)
+                except OSError:
+                    pass
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
             print(f"Error: Could not write to '{output_path}': {exc}", file=sys.stderr)
             sys.exit(1)
 

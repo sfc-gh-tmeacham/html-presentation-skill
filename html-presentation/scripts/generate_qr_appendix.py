@@ -22,7 +22,7 @@ import re
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from html import unescape
+from html import escape, unescape
 from io import BytesIO
 from pathlib import Path
 from urllib.request import urlopen
@@ -51,6 +51,16 @@ APPENDIX_SLIDE_RE = re.compile(
     r'\n?<!-- Slide \d+: Links \(Appendix\) -->.*?(?=\n?<!-- Slide|\n?<div\s+class="counter")',
     re.DOTALL | re.IGNORECASE,
 )
+_DOMAIN_RE = re.compile(r'^[\w.-]+\.[a-z]{2,}', re.IGNORECASE)
+_HTTP_PREFIX_RE = re.compile(r'^https?://(?:www\.)?')
+_SLUG_SEP_RE = re.compile(r'[-_]+')
+_QR_WIDTH_RE = re.compile(r'width="(\d+)"')
+_QR_HEIGHT_RE = re.compile(r'height="(\d+)"')
+_QR_WIDTH_ATTR_RE = re.compile(r'\bwidth="[^"]*"')
+_QR_HEIGHT_ATTR_RE = re.compile(r'\bheight="[^"]*"')
+_QR_SVG_OPEN_TAG_RE = re.compile(r'<svg\b([^>]*)>')
+_APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
+_SLIDE_TOTAL_RE = re.compile(r'<span\s+id="total">(\d+)</span>')
 
 
 def extract_links(html: str) -> list[tuple[str, str]]:
@@ -105,7 +115,7 @@ def _looks_like_url(text: str) -> bool:
         return True
     if '/' in text and '.' in text.split('/')[0]:
         return True
-    if re.match(r'^[\w.-]+\.[a-z]{2,}', text, re.IGNORECASE):
+    if _DOMAIN_RE.match(text):
         return True
     return False
 
@@ -125,9 +135,9 @@ def _fetch_page_title(url: str) -> str | None:
 
 def _title_from_url(url: str) -> str:
     """Last-resort: derive a short title from the URL path."""
-    path = re.sub(r'^https?://(?:www\.)?', '', url).rstrip('/')
+    path = _HTTP_PREFIX_RE.sub('', url).rstrip('/')
     last_segment = path.rsplit('/', 1)[-1] if '/' in path else path
-    last_segment = re.sub(r'[-_]+', ' ', last_segment)
+    last_segment = _SLUG_SEP_RE.sub(' ', last_segment)
     return last_segment.title() if last_segment else path
 
 
@@ -160,14 +170,13 @@ def make_qr_svg(url: str) -> str:
         svgns=False,
     )
     svg = buf.getvalue().decode("utf-8")
-    w_match = re.search(r'width="(\d+)"', svg)
-    h_match = re.search(r'height="(\d+)"', svg)
+    w_match = _QR_WIDTH_RE.search(svg)
+    h_match = _QR_HEIGHT_RE.search(svg)
     vb_w = w_match.group(1) if w_match else "33"
     vb_h = h_match.group(1) if h_match else "33"
-    svg = re.sub(r'\bwidth="[^"]*"', "", svg, count=1)
-    svg = re.sub(r'\bheight="[^"]*"', "", svg, count=1)
-    svg = re.sub(
-        r"<svg\b([^>]*)>",
+    svg = _QR_WIDTH_ATTR_RE.sub("", svg, count=1)
+    svg = _QR_HEIGHT_ATTR_RE.sub("", svg, count=1)
+    svg = _QR_SVG_OPEN_TAG_RE.sub(
         rf'<svg\1 viewBox="0 0 {vb_w} {vb_h}" width="100%" height="100%" style="display:block;border-radius:8px;">',
         svg,
         count=1,
@@ -194,8 +203,8 @@ def build_appendix_slide(
             f'        </div>\n'
             f'        <p style="font-size:14px;color:#ccc;'
             f'margin-top:14px;line-height:1.3;">'
-            f'<a href="{url}" target="_blank" rel="noopener" '
-            f'style="border-bottom:none;color:#ccc;">{title}</a></p>\n'
+            f'<a href="{escape(url)}" target="_blank" rel="noopener" '
+            f'style="border-bottom:none;color:#ccc;">{escape(title)}</a></p>\n'
             f"      </div>"
         )
         cards.append(card)
@@ -267,9 +276,7 @@ def main() -> None:
         print("No external links found — nothing to do.", file=sys.stderr)
         sys.exit(0)
 
-    existing_appendix = re.search(
-        r'<!-- Slide \d+: Links \(Appendix\) -->', html
-    )
+    existing_appendix = _APPENDIX_MARKER_RE.search(html)
     if existing_appendix:
         if not args.force:
             print("QR appendix slide already exists — skipping. Use --force to regenerate.", file=sys.stderr)
@@ -277,14 +284,13 @@ def main() -> None:
         print("--force: removing existing QR appendix slide(s)...", file=sys.stderr)
         html, removed = remove_existing_appendix(html)
         if removed:
-            num_match = re.search(r'<span\s+id="total">(\d+)</span>', html)
+            num_match = _SLIDE_TOTAL_RE.search(html)
             if num_match:
                 old_total = int(num_match.group(1))
                 new_total = old_total - removed
                 html = TOTAL_RE.sub(rf"\g<1>{new_total}\2", html)
             print(f"  Removed {removed} appendix slide(s).", file=sys.stderr)
 
-    accent = extract_accent(html)
     last_num = find_last_slide_num(html)
 
     chunks = [links[i:i + QR_PER_SLIDE] for i in range(0, len(links), QR_PER_SLIDE)]
@@ -304,7 +310,9 @@ def main() -> None:
     insert_pos = counter_match.start()
     html = html[:insert_pos] + all_slides_html + "\n" + html[insert_pos:]
 
-    new_total = last_num + total_pages
+    total_match = _SLIDE_TOTAL_RE.search(html)
+    current_total = int(total_match.group(1)) if total_match else last_num
+    new_total = current_total + total_pages
     html = TOTAL_RE.sub(rf"\g<1>{new_total}\2", html)
 
     tmp_fd, tmp_path = None, None
@@ -336,7 +344,6 @@ def main() -> None:
         f"with {len(links)} QR code(s).",
         file=sys.stderr,
     )
-    print(f"  Accent color: {accent}", file=sys.stderr)
     for url, title in links:
         print(f"  • {title} → {url}", file=sys.stderr)
 

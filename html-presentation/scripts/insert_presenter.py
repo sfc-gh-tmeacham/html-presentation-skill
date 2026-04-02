@@ -37,6 +37,7 @@ import os
 import re
 import sys
 import tempfile
+from html import escape
 from io import BytesIO
 from pathlib import Path
 
@@ -123,7 +124,7 @@ def build_headshot_html(name: str, b64: str | None, size_css: str, icon_clamp: s
     )
     if b64:
         return (
-            f'<img src="{b64}" alt="{name}" style="{circle_style}">'
+            f'<img src="{b64}" alt="{escape(name)}" style="{circle_style}">'
         )
     return (
         f'<div style="{circle_style}display:flex;align-items:center;'
@@ -162,8 +163,8 @@ def build_presenter_slide(presenters: list[dict]) -> str:
             'align-items:center;gap:16px;transition-delay:0.1s;">\n'
             f'      {headshot}\n'
             '      <div style="text-align:center;">\n'
-            f'        <h4 style="font-size:clamp(1.5rem,2.5vw,2.25rem);margin-bottom:4px;">{p["name"]}</h4>\n'
-            f'        <p style="font-size:clamp(1rem,1.5vw,1.5rem);color:var(--secondary);">{p["title"]}</p>\n'
+            f'        <h4 style="font-size:clamp(1.5rem,2.5vw,2.25rem);margin-bottom:4px;">{escape(p["name"])}</h4>\n'
+            f'        <p style="font-size:clamp(1rem,1.5vw,1.5rem);color:var(--secondary);">{escape(p["title"])}</p>\n'
             '      </div>\n'
             '    </div>\n'
             '  </div>\n'
@@ -180,8 +181,8 @@ def build_presenter_slide(presenters: list[dict]) -> str:
         cards.append(
             f'    <div class="card" style="text-align:center;padding:28px 24px;">\n'
             f'      {headshot}\n'
-            f'      <h4 style="font-size:clamp(1.1rem,2vw,1.5rem);margin-top:12px;margin-bottom:4px;">{p["name"]}</h4>\n'
-            f'      <p style="font-size:clamp(0.875rem,1.3vw,1.125rem);color:var(--secondary);">{p["title"]}</p>\n'
+            f'      <h4 style="font-size:clamp(1.1rem,2vw,1.5rem);margin-top:12px;margin-bottom:4px;">{escape(p["name"])}</h4>\n'
+            f'      <p style="font-size:clamp(0.875rem,1.3vw,1.125rem);color:var(--secondary);">{escape(p["title"])}</p>\n'
             f'    </div>'
         )
     cards_html = "\n".join(cards)
@@ -216,13 +217,10 @@ def find_insertion_point(html: str) -> str | None:
     Returns:
         The matched comment string, or None if not found.
     """
-    for pattern in [r'<!-- Agenda.*?-->', r'<!-- Slide 2:.*?-->']:
-        match = re.search(pattern, html)
+    for pattern_str in [r'<!-- Slide 2:.*?-->', r'<!-- Slide \d+:\s*Agenda.*?-->', r'<!-- Slide \d+:.*?-->']:
+        match = re.search(pattern_str, html, re.DOTALL)
         if match:
             return match.group(0)
-    match = re.search(r'<!-- Slide \d+:.*?-->', html)
-    if match:
-        return match.group(0)
     return None
 
 
@@ -290,7 +288,7 @@ def insert_slide(html: str, presenter_html: str) -> str:
 
     for i in range(max_slide, first_slide_num - 1, -1):
         html = re.sub(
-            rf'(<div\s[^>]*\bid="s){i}(")',
+            rf'(<div\s[^>]*(?<![a-zA-Z0-9_-])id="s){i}(")',
             rf'\g<1>{i + 1}\2',
             html,
         )
@@ -305,7 +303,8 @@ def insert_slide(html: str, presenter_html: str) -> str:
         new_total = current_total + 1
         html = html.replace(
             f'<span id="total">{current_total}</span>',
-            f'<span id="total">{new_total}</span>'
+            f'<span id="total">{new_total}</span>',
+            1,
         )
 
     return html

@@ -64,6 +64,15 @@ MIME_OVERRIDES: dict[str, str] = {
     ".ico": "image/x-icon",
 }
 
+_FMT_MIME: dict[str, str] = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    "GIF": "image/gif",
+    "WEBP": "image/webp",
+    "BMP": "image/bmp",
+    "TIFF": "image/tiff",
+}
+
 RASTER_EXTENSIONS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 
 PLACEHOLDER_RE = re.compile(r"\{\{IMG:(.+?)\}\}")
@@ -108,7 +117,7 @@ def resize_and_encode(file_path: Path, max_size: int) -> tuple[str, int]:
     raw = buf.getvalue()
 
     ext = file_path.suffix.lower()
-    mime = MIME_OVERRIDES.get(ext) or mimetypes.guess_type(str(file_path))[0] or "image/png"
+    mime = _FMT_MIME.get(fmt.upper()) or MIME_OVERRIDES.get(ext) or "image/png"
     encoded = base64.b64encode(raw).decode("ascii")
     return f"data:{mime};base64,{encoded}", len(raw)
 
@@ -157,6 +166,8 @@ def parse_token(token_body: str) -> tuple[str, int | None]:
         path_str = parts[0].strip()
         try:
             size = int(parts[1].strip())
+            if size <= 0:
+                size = None
         except ValueError:
             path_str = token_body.strip()
             size = None
@@ -189,7 +200,7 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
     if dry_run:
         for match in PLACEHOLDER_RE.finditer(html):
             path_str, per_token_size = parse_token(match.group(1))
-            max_size = per_token_size or default_max_size
+            max_size = per_token_size if per_token_size is not None else default_max_size
             file_path = resolve_path(path_str, base_dir)
             if not file_path.exists():
                 errors.append(f"  NOT FOUND: {path_str} (resolved: {file_path})")
@@ -207,7 +218,7 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
         nonlocal count, total_bytes
         token_body = match.group(1)
         path_str, per_token_size = parse_token(token_body)
-        max_size = per_token_size or default_max_size
+        max_size = per_token_size if per_token_size is not None else default_max_size
         file_path = resolve_path(path_str, base_dir)
 
         if not file_path.exists():
@@ -222,7 +233,7 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
             return match.group(0)
 
         try:
-            data_uri, raw_bytes = encode_file(file_path, max_size)
+            data_uri, _ = encode_file(file_path, max_size)
         except Exception as exc:
             errors.append(f"  ENCODE ERROR: {path_str} — {exc}")
             return match.group(0)

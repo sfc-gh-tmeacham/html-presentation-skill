@@ -14,8 +14,10 @@ Example::
 """
 
 import argparse
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -98,11 +100,51 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800) -> None
     Raises:
         SystemExit: On corrupt/unreadable images or I/O write failures.
     """
-    # Attempt to open the image — catch corrupt files and format errors.
     try:
-        img = Image.open(input_path)
-        # Force-load pixel data now so we catch truncation/corruption early.
-        img.load()
+        with Image.open(input_path) as img:
+            img.load()
+            w, h = img.size
+            if w == 0 or h == 0:
+                print(
+                    f"Error: Image has invalid dimensions ({w}x{h}).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            longest = max(w, h)
+
+            if longest <= max_size:
+                tmp_fd, tmp_path_str = None, None
+                try:
+                    tmp_fd, tmp_path_str = tempfile.mkstemp(
+                        dir=Path(output_path).parent,
+                        suffix=Path(output_path).suffix,
+                    )
+                    os.close(tmp_fd)
+                    tmp_fd = None
+                    shutil.copy2(input_path, tmp_path_str)
+                    os.replace(tmp_path_str, output_path)
+                    tmp_path_str = None
+                except (OSError, shutil.Error) as exc:
+                    if tmp_fd is not None:
+                        try:
+                            os.close(tmp_fd)
+                        except OSError:
+                            pass
+                    if tmp_path_str is not None:
+                        try:
+                            os.unlink(tmp_path_str)
+                        except OSError:
+                            pass
+                    print(f"Error: Could not copy to '{output_path}': {exc}", file=sys.stderr)
+                    sys.exit(1)
+                print(f"Image already within bounds ({w}x{h}). Saved as-is.")
+                return
+
+            scale = max_size / longest
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            resized = img.resize((new_w, new_h), Image.LANCZOS)
     except UnidentifiedImageError:
         print(
             f"Error: '{input_path}' is not a valid image or the format is "
@@ -111,43 +153,31 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800) -> None
         )
         sys.exit(1)
     except (OSError, SyntaxError) as exc:
-        # SyntaxError can occur with certain corrupt PNGs/GIFs in Pillow.
         print(f"Error: Could not read '{input_path}': {exc}", file=sys.stderr)
         sys.exit(1)
 
-    w, h = img.size
-
-    # Guard against degenerate images (0×0, metadata-only, etc.).
-    if w == 0 or h == 0:
-        print(
-            f"Error: Image has invalid dimensions ({w}x{h}).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    longest = max(w, h)
-
-    # If the image is already small enough, just copy it to the output path.
-    if longest <= max_size:
-        try:
-            shutil.copy2(input_path, output_path)
-        except (OSError, shutil.Error) as exc:
-            print(f"Error: Could not copy to '{output_path}': {exc}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Image already within bounds ({w}x{h}). Saved as-is.")
-        return
-
-    # Calculate the uniform scale factor so the longest side == max_size.
-    scale = max_size / longest
-    new_w = max(1, int(w * scale))
-    new_h = max(1, int(h * scale))
-
-    # Lanczos (a.k.a. ANTIALIAS) produces the sharpest downscale results.
-    resized = img.resize((new_w, new_h), Image.LANCZOS)
-
+    tmp_fd2, tmp_path2 = None, None
     try:
-        resized.save(output_path)
+        tmp_fd2, tmp_path2 = tempfile.mkstemp(
+            dir=Path(output_path).parent,
+            suffix=Path(output_path).suffix,
+        )
+        os.close(tmp_fd2)
+        tmp_fd2 = None
+        resized.save(tmp_path2)
+        os.replace(tmp_path2, output_path)
+        tmp_path2 = None
     except (OSError, ValueError) as exc:
+        if tmp_fd2 is not None:
+            try:
+                os.close(tmp_fd2)
+            except OSError:
+                pass
+        if tmp_path2 is not None:
+            try:
+                os.unlink(tmp_path2)
+            except OSError:
+                pass
         print(f"Error: Could not save to '{output_path}': {exc}", file=sys.stderr)
         sys.exit(1)
 

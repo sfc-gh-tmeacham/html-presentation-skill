@@ -25,8 +25,10 @@ Examples::
 """
 
 import argparse
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # Maximum SVG file size we'll attempt to process (10 MB).  Larger files
@@ -38,30 +40,33 @@ MAX_SVG_SIZE_BYTES: int = 10 * 1024 * 1024
 # uses DOTALL so `.*?` can span newlines inside the element.
 STRIP_ELEMENTS: list[str] = [
     r"<metadata[\s>].*?</metadata>",           # Dublin Core / RDF metadata blocks
+    r"<metadata\s*/>",                          # Self-closing variant
     r"<sodipodi:namedview[\s>].*?</sodipodi:namedview>",  # Inkscape canvas settings
+    r"<sodipodi:namedview\s*/>",                # Self-closing variant
     r"<namedview[\s>].*?</namedview>",          # Generic named-view variant
+    r"<namedview\s*/>",                         # Self-closing variant
     r"<defs>\s*</defs>",                        # Empty <defs> wrappers (no actual defs)
-    r"<defs/>",                                 # Self-closing empty <defs>
+    r"<defs\s*/>",                              # Self-closing: <defs/> and <defs />
     r"<!--.*?-->",                              # All XML/HTML comments
 ]
 
 # Regex patterns for individual attributes that should be stripped from tags.
 # Each pattern starts with \s+ to also consume the leading whitespace.
 STRIP_ATTRS: list[str] = [
-    # Editor namespace declarations
-    r'\s+xmlns:inkscape="[^"]*"',
-    r'\s+xmlns:sodipodi="[^"]*"',
-    r'\s+xmlns:sketch="[^"]*"',
-    r'\s+xmlns:dc="[^"]*"',
-    r'\s+xmlns:cc="[^"]*"',
-    r'\s+xmlns:rdf="[^"]*"',
+    # Editor namespace declarations (double or single quoted)
+    "\\s+xmlns:inkscape=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+xmlns:sodipodi=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+xmlns:sketch=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+xmlns:dc=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+xmlns:cc=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+xmlns:rdf=(?:\"[^\"]*\"|'[^']*')",
     # Editor-specific per-element attributes
-    r'\s+inkscape:[a-z\-]+="[^"]*"',
-    r'\s+sodipodi:[a-z\-]+="[^"]*"',
-    r'\s+sketch:[a-z\-]+="[^"]*"',
+    "\\s+inkscape:[a-z\\-]+=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+sodipodi:[a-z\\-]+=(?:\"[^\"]*\"|'[^']*')",
+    "\\s+sketch:[a-z\\-]+=(?:\"[^\"]*\"|'[^']*')",
     # Miscellaneous noise
-    r'\s+xml:space="[^"]*"',                    # Redundant whitespace-handling hint
-    r'\s+data-name="[^"]*"',                    # Design-tool layer names
+    "\\s+xml:space=(?:\"[^\"]*\"|'[^']*')",    # Redundant whitespace-handling hint
+    "\\s+data-name=(?:\"[^\"]*\"|'[^']*')",    # Design-tool layer names
 ]
 
 # Pre-compiled versions of the above patterns for efficient repeated use.
@@ -156,23 +161,11 @@ def optimize_svg(content: str) -> str:
     """
     # Pass 1: Remove whole elements (metadata blocks, comments, empty defs).
     for pattern in _STRIP_ELEMENTS_RE:
-        try:
-            content = pattern.sub("", content)
-        except re.error as exc:
-            print(
-                f"Warning: Regex failed for element pattern '{pattern.pattern[:40]}...': {exc}",
-                file=sys.stderr,
-            )
+        content = pattern.sub("", content)
 
     # Pass 2: Remove individual editor-specific attributes from remaining tags.
     for pattern in _STRIP_ATTRS_RE:
-        try:
-            content = pattern.sub("", content)
-        except re.error as exc:
-            print(
-                f"Warning: Regex failed for attribute pattern '{pattern.pattern[:40]}...': {exc}",
-                file=sys.stderr,
-            )
+        content = pattern.sub("", content)
 
     # Collapse runs of 3+ blank lines down to a single blank line.
     content = _BLANK_LINES_RE.sub("\n\n", content)
@@ -243,9 +236,27 @@ def main() -> None:
             )
             sys.exit(1)
 
+        tmp_fd, tmp_path = None, None
         try:
-            output_path.write_text(optimized, encoding="utf-8")
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=output_path.parent, prefix=".svgopt_tmp_", suffix=".svg"
+            )
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(optimized)
+            tmp_fd = None
+            os.replace(tmp_path, output_path)
+            tmp_path = None
         except OSError as exc:
+            if tmp_fd is not None:
+                try:
+                    os.close(tmp_fd)
+                except OSError:
+                    pass
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
             print(f"Error: Could not write to '{output_path}': {exc}", file=sys.stderr)
             sys.exit(1)
 

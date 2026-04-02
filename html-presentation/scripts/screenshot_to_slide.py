@@ -129,11 +129,12 @@ def auto_crop(img: Image.Image, fuzz: int = 15) -> Image.Image:
         A cropped copy of the image, or the original if no border was found
         or if cropping would produce an empty result.
     """
-    try:
-        # Convert to RGBA so we have a consistent 4-channel comparison.
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
+    # Convert to RGBA before the try block so the except handler can
+    # always return a valid RGBA image regardless of where an error occurs.
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
 
+    try:
         # Build a solid image filled with the top-left pixel's color.
         bg = Image.new("RGBA", img.size, img.getpixel((0, 0)))
 

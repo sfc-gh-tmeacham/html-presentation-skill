@@ -72,19 +72,23 @@ VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r"conic-gradient",
 ]]
 
-SLIDE_RE = re.compile(r'<div\s+class="slide[^"]*"[^>]*id="s(\d+)"', re.IGNORECASE)
+SLIDE_RE = re.compile(
+    r'<div\b(?=[^>]*\bclass="slide)(?=[^>]*\bid="s(\d+)")',
+    re.IGNORECASE,
+)
 SLIDE_ALL_RE = re.compile(
-    r'<div\s+class="slide[^"]*"[^>]*id="(s[^"]+)"',
+    r'<div\b(?=[^>]*\bclass="slide)(?=[^>]*\bid="(s[^"]+)")',
     re.IGNORECASE,
 )
 SLIDE_BLOCK_RE = re.compile(
-    r'(<div\s+class="slide[^"]*"[^>]*id="(s[^"]+)"[^>]*>)(.*?)(?=<div\s+class="slide[\s"][^>]*id="s|<div\s+class="nav"|</body>)',
+    r'(<div\b(?=[^>]*\bclass="slide[^"]*")(?=[^>]*\bid="(s[^"]+)")[^>]*>)(.*?)'
+    r'(?=<div\b(?=[^>]*\bclass="slide[\s"])(?=[^>]*\bid="s)|<div\s+class="nav"|</body>)',
     re.DOTALL | re.IGNORECASE,
 )
 TOTAL_RE = re.compile(r'<span\s+id="total"[^>]*>\s*(\d+)\s*</span>', re.IGNORECASE)
 PLACEHOLDER_RE = re.compile(r"\{\{IMG:.+?\}\}")
 IMG_TAG_RE = re.compile(r"<img\s[^>]*>", re.IGNORECASE)
-ALT_RE = re.compile(r'\balt\s*=\s*"', re.IGNORECASE)
+ALT_RE = re.compile(r'\balt\s*=\s*["\']', re.IGNORECASE)
 SPEAKER_NOTES_RE = re.compile(r'class="speaker-notes"', re.IGNORECASE)
 DISPLAY_NONE_SLIDE_RE = re.compile(r"\.slide[^{]*\{[^}]*display\s*:\s*none", re.IGNORECASE)
 REDUCED_MOTION_RE = re.compile(r"prefers-reduced-motion", re.IGNORECASE)
@@ -323,8 +327,10 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         passes.append("All <ul>/<ol> elements have text-align:left")
 
     # 15. Rule 16 — SVG containers should have max-height >= 58vh
+    # Strip <style>/<script> blocks first to avoid false positives from CSS rules.
+    html_no_style = STYLE_TAG_RE.sub("", SCRIPT_TAG_RE.sub("", html))
     svg_low_height: list[str] = []
-    for m in SVG_CONTAINER_RE.finditer(html):
+    for m in SVG_CONTAINER_RE.finditer(html_no_style):
         val = float(m.group(1))
         unit = m.group(2).lower()
         if unit == "vh" and val < 58:
