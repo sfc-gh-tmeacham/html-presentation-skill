@@ -18,6 +18,7 @@ Usage::
 
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from io import BytesIO
 from pathlib import Path
@@ -52,10 +53,13 @@ def extract_links(html: str) -> list[tuple[str, str]]:
     1. Anchor text from the first ``<a>`` for each URL (if it looks
        like a real title, not just a bare domain/path)
     2. Fetch the remote page ``<title>`` tag (best-effort, 3 s timeout)
+       — all fetches run concurrently via ThreadPoolExecutor
     3. Derive a readable title from the URL path
     """
     seen: set[str] = set()
-    links: list[tuple[str, str]] = []
+    ordered: list[tuple[str, str | None]] = []
+    needs_fetch: list[str] = []
+
     for m in LINK_RE.finditer(html):
         url = m.group(1)
         if url in seen:
@@ -63,11 +67,28 @@ def extract_links(html: str) -> list[tuple[str, str]]:
         seen.add(url)
         raw_text = TAG_RE.sub('', m.group(2)).strip()
         if raw_text and not _looks_like_url(raw_text):
-            title = raw_text
+            ordered.append((url, raw_text))
         else:
-            title = _fetch_page_title(url) or _title_from_url(url)
-        links.append((url, title))
-    return links
+            ordered.append((url, None))
+            needs_fetch.append(url)
+
+    if needs_fetch:
+        fetched: dict[str, str | None] = {}
+        with ThreadPoolExecutor(max_workers=min(len(needs_fetch), 8)) as pool:
+            future_to_url = {pool.submit(_fetch_page_title, url): url for url in needs_fetch}
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    fetched[url] = future.result()
+                except Exception:
+                    fetched[url] = None
+
+        ordered = [
+            (url, title if title is not None else (fetched.get(url) or _title_from_url(url)))
+            for url, title in ordered
+        ]
+
+    return [(url, title or _title_from_url(url)) for url, title in ordered]
 
 
 def _looks_like_url(text: str) -> bool:
@@ -210,8 +231,7 @@ def remove_existing_appendix(html: str) -> tuple[str, int]:
         r'\n?<!-- Slide \d+: Links \(Appendix\) -->.*?(?=\n?<!-- Slide|\n?<div\s+class="counter")',
         re.DOTALL | re.IGNORECASE,
     )
-    removed_count = len(appendix_slide_re.findall(html))
-    html = appendix_slide_re.sub("", html)
+    html, removed_count = appendix_slide_re.subn("", html)
     return html, removed_count
 
 
@@ -255,11 +275,9 @@ def main() -> None:
         print("--force: removing existing QR appendix slide(s)...", file=sys.stderr)
         html, removed = remove_existing_appendix(html)
         if removed:
-            current_total_match = TOTAL_RE.search(html)
-            if current_total_match:
-                old_total = int(current_total_match.group(1).replace(
-                    current_total_match.group(1), current_total_match.group(1)
-                ))
+            num_match = re.search(r'<span\s+id="total">(\d+)</span>', html)
+            if num_match:
+                old_total = int(num_match.group(1))
                 new_total = old_total - removed
                 html = TOTAL_RE.sub(rf"\g<1>{new_total}\2", html)
             print(f"  Removed {removed} appendix slide(s).", file=sys.stderr)

@@ -33,10 +33,9 @@ from pathlib import Path
 # Dependencies required by the helper scripts (Pillow is the only external one).
 DEPENDENCIES: list[str] = ["Pillow", "segno"]
 
-# Resolve the absolute path to the scripts/ directory regardless of where
-# the wrapper is invoked from.
 SCRIPT_DIR: Path = Path(__file__).resolve().parent
 VENV_DIR: Path = SCRIPT_DIR / ".venv"
+DEPS_OK_SENTINEL: Path = VENV_DIR / ".deps_ok"
 
 
 def _is_windows() -> bool:
@@ -119,6 +118,7 @@ def _create_venv_uv() -> None:
 
     print(f"Installing dependencies: {', '.join(DEPENDENCIES)}...", file=sys.stderr)
     _run(["uv", "pip", "install", "--python", str(_venv_python())] + DEPENDENCIES + ["--quiet"])
+    DEPS_OK_SENTINEL.touch()
 
 
 def _create_venv_stdlib() -> None:
@@ -126,11 +126,11 @@ def _create_venv_stdlib() -> None:
     print("uv not found — falling back to python -m venv...", file=sys.stderr)
     _run([sys.executable, "-m", "venv", str(VENV_DIR)])
 
-    # Upgrade pip to avoid stale-version warnings.
     _run([str(_venv_pip()), "install", "--upgrade", "pip", "--quiet"])
 
     print(f"Installing dependencies: {', '.join(DEPENDENCIES)}...", file=sys.stderr)
     _run([str(_venv_pip()), "install"] + DEPENDENCIES + ["--quiet"])
+    DEPS_OK_SENTINEL.touch()
 
 
 def ensure_venv() -> None:
@@ -170,18 +170,22 @@ def ensure_venv() -> None:
 def ensure_deps() -> None:
     """Verify that required dependencies are importable; reinstall if not.
 
-    Runs a quick ``import PIL`` check inside the venv.  If it fails,
-    triggers a reinstall of all dependencies.
+    Uses a sentinel file (``.deps_ok``) to skip the subprocess check on
+    repeat invocations.  Only falls back to a live import check when the
+    sentinel is absent.
     """
+    if DEPS_OK_SENTINEL.is_file():
+        return
+
     venv_python = str(_venv_python())
 
-    # Quick smoke test — try to import Pillow inside the venv.
     result = subprocess.run(
         [venv_python, "-c", "import PIL; import segno"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if result.returncode == 0:
+        DEPS_OK_SENTINEL.touch()
         return
 
     print("Dependencies missing — reinstalling...", file=sys.stderr)
@@ -189,6 +193,7 @@ def ensure_deps() -> None:
         _run(["uv", "pip", "install", "--python", venv_python] + DEPENDENCIES + ["--quiet"])
     else:
         _run([str(_venv_pip()), "install"] + DEPENDENCIES + ["--quiet"])
+    DEPS_OK_SENTINEL.touch()
 
 
 def list_available_scripts() -> list[str]:
@@ -256,6 +261,8 @@ def main() -> None:
     if reinstall and VENV_DIR.exists():
         print(f"--reinstall: removing existing venv at {VENV_DIR}...", file=sys.stderr)
         _shutil.rmtree(str(VENV_DIR))
+        if DEPS_OK_SENTINEL.exists():
+            DEPS_OK_SENTINEL.unlink()
 
     target_name = filtered_argv[1]
     target_path = resolve_target(target_name)

@@ -167,6 +167,9 @@ def parse_token(token_body: str) -> tuple[str, int | None]:
 def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool = False) -> tuple[str, int, int, list[str]]:
     """Find and replace all ``{{IMG:...}}`` placeholders in the HTML.
 
+    Uses a single ``re.sub`` pass with a replacement callback so the HTML
+    string is only traversed once regardless of how many placeholders exist.
+
     Args:
         html: The full HTML string.
         default_max_size: Default max dimension for raster images.
@@ -176,57 +179,60 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
     Returns:
         A tuple of (modified_html, count_replaced, total_bytes_added, errors).
     """
-    tokens = list(PLACEHOLDER_RE.finditer(html))
-    if not tokens:
+    if not PLACEHOLDER_RE.search(html):
         return html, 0, 0, []
 
     count = 0
     total_bytes = 0
     errors: list[str] = []
-    replacements: list[tuple[str, str]] = []
 
-    for match in tokens:
-        full_token = match.group(0)
+    if dry_run:
+        for match in PLACEHOLDER_RE.finditer(html):
+            path_str, per_token_size = parse_token(match.group(1))
+            max_size = per_token_size or default_max_size
+            file_path = resolve_path(path_str, base_dir)
+            if not file_path.exists():
+                errors.append(f"  NOT FOUND: {path_str} (resolved: {file_path})")
+            elif not file_path.is_file():
+                errors.append(f"  NOT A FILE: {path_str} (resolved: {file_path})")
+            elif file_path.stat().st_size > MAX_FILE_SIZE_BYTES:
+                mb = file_path.stat().st_size / (1024 * 1024)
+                errors.append(f"  TOO LARGE: {path_str} ({mb:.1f} MB)")
+            else:
+                print(f"  WOULD EMBED: {path_str} (max {max_size}px)")
+                count += 1
+        return html, count, 0, errors
+
+    def _replace(match: re.Match) -> str:
+        nonlocal count, total_bytes
         token_body = match.group(1)
-
         path_str, per_token_size = parse_token(token_body)
         max_size = per_token_size or default_max_size
-
         file_path = resolve_path(path_str, base_dir)
 
         if not file_path.exists():
             errors.append(f"  NOT FOUND: {path_str} (resolved: {file_path})")
-            continue
-
+            return match.group(0)
         if not file_path.is_file():
             errors.append(f"  NOT A FILE: {path_str} (resolved: {file_path})")
-            continue
-
+            return match.group(0)
         if file_path.stat().st_size > MAX_FILE_SIZE_BYTES:
             mb = file_path.stat().st_size / (1024 * 1024)
             errors.append(f"  TOO LARGE: {path_str} ({mb:.1f} MB)")
-            continue
-
-        if dry_run:
-            print(f"  WOULD EMBED: {path_str} (max {max_size}px)")
-            count += 1
-            continue
+            return match.group(0)
 
         try:
             data_uri, raw_bytes = encode_file(file_path, max_size)
         except Exception as exc:
             errors.append(f"  ENCODE ERROR: {path_str} — {exc}")
-            continue
+            return match.group(0)
 
-        replacements.append((full_token, data_uri))
-        total_bytes += len(data_uri)
         count += 1
+        total_bytes += len(data_uri)
+        return data_uri
 
-    if not dry_run:
-        for token, uri in replacements:
-            html = html.replace(token, uri, 1)
-
-    return html, count, total_bytes, errors
+    result = PLACEHOLDER_RE.sub(_replace, html)
+    return result, count, total_bytes, errors
 
 
 def main() -> None:
