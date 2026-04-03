@@ -135,6 +135,20 @@ Use the returned brief as the factual foundation for slide copy in Step 2.
 
 **Checkpoint:** Save the full brief (with all tags and citations intact) to `[folder]/[topic-slug]-brief.md` immediately after the subagent returns. This file is a citable research artifact — do not strip or summarize the tags and sources when saving.
 
+**URL validation (mandatory after saving brief):** Extract every URL from the brief and verify it resolves. Run:
+```bash
+grep -oE 'https?://[^) >"\n]+' [folder]/[topic-slug]-brief.md | sort -u | while read url; do
+  status=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 10 "$url")
+  echo "$status $url"
+done
+```
+For any URL that returns a non-200 status or times out:
+1. Mark it `[DEAD LINK]` inline in the brief file
+2. Do NOT use it as a citation in slide copy or speaker notes
+3. If the source is the only citation for a key fact, downgrade that fact from `[EXTRACTED]` to `[INFERRED]` and note the dead link
+
+This validation runs on the brief — the HTML link validation in Step 3 is a separate check on links written into the deck itself.
+
 ### Step 2: Plan the Slide Deck
 
 Map each slide to a visual component (see `references/visual-components.md`). Present the plan:
