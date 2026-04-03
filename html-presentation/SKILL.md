@@ -18,7 +18,7 @@ Look for checkpoint files inside the presentation folder:
 
 - `[folder]/[topic-slug]-brief.md` — research brief (means Step 1 research is done)
 - `[folder]/[topic-slug]-plan.md` — approved slide plan (means Step 2 is done; proceed directly to Step 3)
-- `[folder]/[topic-slug]-slides.html` — HTML file exists (means build is done; proceed to Step 5)
+- `[folder]/[topic-slug]-[audience-slug]-slides.html` — HTML file exists (means build is done; proceed to Step 5)
 
 If checkpoint files exist, read them and resume from the furthest completed step. Inform the user: "Found a prior checkpoint — resuming from Step N."
 
@@ -39,6 +39,7 @@ Ask the user for:
 - **Title slide logo** -- offer three options: (1) Snowflake logo (`assets/snowflake-logo.svg`), (2) a different logo they provide, or (3) no logo. If they choose option 2, collect the file path (or let them paste/attach the image in a follow-up message).
 - **Custom graphics** -- any additional logos, screenshots, or diagrams to include beyond the title slide logo? Advise the user that images with a transparent background work best. Accept file paths to PNG, JPG, SVG, or other image formats — or the user can paste images directly into the chat.
 - **Presenter slide** -- would they like to include a presenter slide? If yes, ask how many presenters there are, then gather for each: (1) full name, (2) title/role. Optionally ask if they'd like to include a headshot photo for each presenter — they can provide a file path **or paste the image directly into the chat**. The presenter count determines the layout (see Presenter slide visual rules). The presenter slide does NOT count toward the slide count max.
+- **Executive audience** -- is this presentation for an executive audience (VP, C-suite, board, or key decision-makers)? If yes, set `exec_mode: true` — this activates BLUF structure: the recommendation comes first, the Agenda slide is skipped, slide titles become declarative assertions, and the deck is capped at 7 content slides. See Step 2 and Content Rules for full details.
 
 **Handling the title slide logo:**
 - **Snowflake logo**: Read `assets/snowflake-logo.svg` and note the file path — you will inline it during Step 3. Do NOT attempt to inline it now.
@@ -65,11 +66,12 @@ If the user provides a document, transcript, or notes, extract these elements au
 
 - Derive `[topic-slug]` from the topic (lowercase, hyphen-separated, e.g., `cortex-ai-overview`)
 - Derive `[customer-slug]` from the customer name if provided (lowercase, hyphen-separated, e.g., `acme-corp`)
+- Derive `[audience-slug]` from the audience description (lowercase, hyphen-separated, max 2–3 words, e.g., `exec`, `engineering-team`, `sales-leadership`, `all-hands`)
 - Create the folder: `[customer-slug]/[topic-slug]/` if a customer was given, otherwise `[topic-slug]/`
 - All artifacts for this presentation (brief, plan, HTML, images) will be written to this folder
 - Inform the user: "Created presentation folder: `[folder-path]`"
 
-**⚠️ MANDATORY STOPPING POINT**: You MUST present these questions to the user and wait for their answers before proceeding. Do NOT skip ahead to planning or building. Even if the user's initial message implies a topic, you must still confirm all nine items (topic/audience, customer, industry, slide count, key points, accent color, speaker notes, custom graphics, presenter slide) with the user before moving to Step 2.
+**⚠️ MANDATORY STOPPING POINT**: You MUST present these questions to the user and wait for their answers before proceeding. Do NOT skip ahead to planning or building. Even if the user's initial message implies a topic, you must still confirm all ten items (topic/audience, customer, industry, slide count, key points, accent color, speaker notes, custom graphics, presenter slide, executive audience) with the user before moving to Step 2.
 
 **Image collection follow-up:** After the user answers the Step 1 questions, check if they indicated they want to include images (headshots, logos, screenshots, etc.) but did NOT yet provide a file path or paste an image. If any images are still outstanding, prompt the user **before** moving to Step 2:
 - "You mentioned you'd like to include [a headshot / a logo / custom graphics]. Go ahead and paste or drop the image(s) here (type any text like 'here you go' along with it so you can press Enter), or provide a file path. I'll wait before moving on to the slide plan."
@@ -99,6 +101,8 @@ Return:
 5. Common objections or questions the audience may raise
 6. Suggested narrative arc: problem → insight → solution → outcome
 
+If `exec_mode` is true: restructure the narrative arc as **conclusion → evidence → context** (BLUF order). The executive already knows the problem — lead with the recommendation, then prove it, then provide context only if needed.
+
 Be specific. Format as a structured markdown brief. Do not write slide copy — only gather raw material.
 ```
 
@@ -124,6 +128,22 @@ Slide N: Takeaway -- Stat Callout + call to action
 ```
 
 **⚠️ MANDATORY STOPPING POINT**: Present the slide plan to the user. Do NOT proceed to Step 3 until user explicitly approves.
+
+**Executive deck plan (exec_mode):** When `exec_mode` is true, use this BLUF-first structure instead of the standard flow:
+
+```
+Slide 1: Title -- "Topic Name" with subtitle + accent gradient
+Presenter: [if requested] (does not count toward slide max)
+Slide 2: Executive Summary -- BLUF: state the recommendation or key conclusion directly (use CTA Block or Stat Callout — no bullets)
+Slide 3: Context -- ONE slide max: brief "why this matters" (not a full setup sequence)
+Slide 4–6: Supporting Evidence -- Prove the recommendation with data, comparisons, or examples
+Slide 7: Call to Action -- Specific ask with a clear next step and owner
+```
+
+Executive deck rules:
+- **Cap at 7 content slides.** Executives do not read long decks — if content cannot fit in 7 slides, cut it, don't add slides.
+- **No Agenda slide.** Skip it entirely — executives prefer to reach the point immediately.
+- **No setup/problem-framing before the BLUF.** Slide 2 is always the recommendation, not the context.
 
 **Checkpoint:** Once the user approves, save the full slide plan to `[folder]/[topic-slug]-plan.md` before starting the build.
 
@@ -185,6 +205,16 @@ When in doubt, use 5. Smaller batches add one extra `edit` call but prevent losi
 
 If the deck has no user-provided images (only Material Icons, inline SVGs, and CSS graphics), skip the embed phase — the HTML is already self-contained.
 
+**4. URL validation phase** — After the QR appendix is generated, verify that every external link in the deck resolves successfully. Extract all `href` URLs (excluding SVG namespace and font CDN entries):
+```bash
+grep -oE 'href="https?://[^"]+' <deck.html> | sed 's/href="//' | grep -v 'googleapis.com' | sort -u
+```
+For each URL, check its HTTP status:
+```bash
+curl -sL -o /dev/null -w "%{http_code} %{url_effective}\n" "<URL>"
+```
+Any URL returning a non-200 status MUST be replaced with a live equivalent before proceeding. After fixing any broken URLs, re-run `generate_qr_appendix.py` — it is idempotent and will rebuild QR codes to encode the corrected links. Do not proceed to Step 4 with unresolved broken links.
+
 For all image/graphics technical details, see `references/graphics-embedding.md`.
 
 **Slide ID and numbering rules:**
@@ -195,11 +225,11 @@ For all image/graphics technical details, see `references/graphics-embedding.md`
 
 ### Step 4: Save and Preview
 
-Save the file as `[folder]/[topic-slug]-slides.html`.
+Save the file as `[folder]/[topic-slug]-[audience-slug]-slides.html`.
 
 Open in the default browser:
 ```bash
-open [folder]/[topic-slug]-slides.html
+open [folder]/[topic-slug]-[audience-slug]-slides.html
 ```
 
 If `open` fails, try `xdg-open` (Linux) or provide the file path for manual opening.
@@ -214,10 +244,10 @@ Inform the user: "Validating the deck — this may take a minute." Then delegate
 
 Prompt:
 ```
-Validate and fix the HTML slide deck at: [folder]/[topic-slug]-slides.html
+Validate and fix the HTML slide deck at: [folder]/[topic-slug]-[audience-slug]-slides.html
 
 Step 1: Run the validator with context enabled:
-  python scripts/run_script.py validate_deck.py [folder]/[topic-slug]-slides.html --context 5
+  python scripts/run_script.py validate_deck.py [folder]/[topic-slug]-[audience-slug]-slides.html --context 5
 
   The `--context 5` flag prints ±5 lines around each warning/failure, with any base64
   content automatically redacted to `[base64 data omitted — Nkb]`. This gives you all
@@ -238,6 +268,7 @@ Then manually verify:
 - Material Icons render correctly (not showing as text)
 - Animations fire on slide enter
 - Navigation works (arrow keys, slide counter visible)
+- **All external links return HTTP 200** — re-run the URL validation phase if this was skipped or if any links were added during iteration
 - **SVG diagrams (check each slide with an inline SVG):**
   - No two `<rect>` elements in the same column overlap — confirm `y + height` of each box is less than `y` of the next
   - No `<text transform="rotate(` present — rotated text signals a layout problem
@@ -275,6 +306,18 @@ Every deck follows this proven flow:
 | **10. Takeaway** | Land the message | Summary, call to action, next steps |
 
 Adjust the number of core content slides based on topic complexity. Simple topics: 5-7 total slides. Complex topics: 10-15 slides. Never exceed 30 slides.
+
+**Executive Deck Structure (exec_mode):** When `exec_mode` is true, replace the standard flow with the following:
+
+| Slide | Purpose | Content |
+|-------|---------|---------|
+| **1. Title** | Set the stage | Big title, subtitle, your name or brand |
+| **2. Executive Summary** | **BLUF — lead with the conclusion** | The recommendation or key takeaway, stated directly. Use a CTA Block or Stat Callout. No bullets, no build-up. |
+| **3. Context** | Brief "why this matters" (1 slide max) | Background or problem framing — keep it tight |
+| **4–6. Supporting Evidence** | Prove the recommendation | Data, comparisons, case study, or key metrics |
+| **7. Call to Action** | Specific ask | Clear next step, owner, and timeline |
+
+Cap executive decks at **7 content slides**. No Agenda slide.
 
 **Presenter Slide (optional):** If the user requests a presenter slide, include it immediately after the Title slide (before the Agenda). The Presenter slide does NOT count toward the slide count max.
 
@@ -389,5 +432,12 @@ Read `references/presentation-runtime.md` for the complete nav HTML/CSS, slide t
 17. **When removing a stat card from a grid, update the column count.** Dropping a card from `grid-template-columns:repeat(4,1fr)` without updating the repeat value leaves remaining cards stretched across empty columns. Always update `repeat(N,1fr)` to match the actual number of cards remaining.
 18. **Omit uncertain facts rather than guessing.** If a customer-specific figure cannot be confirmed by the user, remove it entirely. An omission is always safer than a wrong number in a customer-facing presentation — and wrong numbers tend to appear in 5–7 places at once.
 19. **SVG diagram boxes must be sized to fit their text — never guess.** Size each `<rect>` width to the longest label it contains. Default to ≥ 200px for any box with a function name, SQL keyword, or long token (e.g., `SYSTEM$STREAM_HAS_DATA()`). Add at least 24px total horizontal padding. Expand the SVG `viewBox` width to match — never let a box clip its label. For single-column flow diagrams, `viewBox="0 0 260 H"` with `cx=130` is a safe default.
+20. **Executive decks use BLUF structure and action titles (exec_mode).** When `exec_mode` is true:
+    - Every slide `<h2>` title MUST be a **declarative assertion** — a sentence that states the conclusion — not a noun label.
+      - ❌ `"Data Architecture"` → ✅ `"Snowflake Eliminates Data Silos Without Migration Risk"`
+      - ❌ `"Key Benefits"` → ✅ `"Three Capabilities That Directly Reduce Your Cost Per Query"`
+    - The Executive Summary slide (s2) MUST use a **CTA Block or Stat Callout** — one bold statement, one supporting line, one key metric if available. No bullet lists. No context before this slide.
+    - **Cap the deck at 7 content slides.** If content does not fit, cut it — never add slides.
+    - **Skip the Agenda slide entirely.** Executives prefer to reach the point immediately.
 
 - ✋ Step 6: After presenting the deck, wait for user feedback before iterating
