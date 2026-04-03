@@ -9,11 +9,16 @@ description: "Generate beautiful self-contained HTML presentations with rich vis
 
 ### Step 0: Resume Check
 
-Before doing anything else, check whether a prior run was interrupted. Look for checkpoint files in the working directory matching the topic slug:
+Before doing anything else, check whether a prior run was interrupted. The presentation folder follows this structure:
 
-- `[topic-slug]-brief.md` — research brief (means Step 1 research is done)
-- `[topic-slug]-plan.md` — approved slide plan (means Step 2 is done; proceed directly to Step 3)
-- `[topic-slug]-slides.html` — HTML file exists (means build is done; proceed to Step 5)
+- **With customer**: `[customer-slug]/[topic-slug]/` (e.g., `acme/cortex-ai/`)
+- **No customer**: `[topic-slug]/` (e.g., `cortex-ai/`)
+
+Look for checkpoint files inside the presentation folder:
+
+- `[folder]/[topic-slug]-brief.md` — research brief (means Step 1 research is done)
+- `[folder]/[topic-slug]-plan.md` — approved slide plan (means Step 2 is done; proceed directly to Step 3)
+- `[folder]/[topic-slug]-slides.html` — HTML file exists (means build is done; proceed to Step 5)
 
 If checkpoint files exist, read them and resume from the furthest completed step. Inform the user: "Found a prior checkpoint — resuming from Step N."
 
@@ -44,12 +49,25 @@ Ask the user for:
 - Do NOT try to collect image paths via ask_user_question. Instead, mention in the question text that the user can provide a file path now OR paste/attach the image in a follow-up message after answering the other questions.
 - Example phrasing: "For your headshot, you can type a file path here, or just paste/drop the image in your next message (type 'done' or any text along with the image so you can press Enter)."
 
-**Handling pasted images:** When a user pastes an image directly into the chat (instead of providing a file path), save it to a temporary file so the build scripts can process it:
-1. Write the pasted image data to a file: `/tmp/pasted_<purpose>_<timestamp>.png` (e.g., `/tmp/pasted_headshot_1711700000.png`)
-2. Use that temp path wherever a file path would normally go — in `{{IMG:...}}` placeholders, `insert_presenter.py --photo`, etc.
-3. Inform the user: "Got it — I've saved your pasted image and will include it in the deck."
+**Handling pasted images:** When a user pastes an image directly into the chat (instead of providing a file path), save it to the presentation folder so the build scripts can process it:
+1. Write the pasted image data to: `[folder]/pasted_<purpose>_<timestamp>.png` (e.g., `acme/cortex-ai/pasted_headshot_1711700000.png`)
+2. Use that path wherever a file path would normally go — in `{{IMG:...}}` placeholders, `insert_presenter.py --photo`, etc.
+3. Inform the user: "Got it — I've saved your pasted image to the presentation folder."
+
+**Handling user-provided image file paths:** When the user provides a path to an image file, copy it into the presentation folder before use:
+1. Copy the file to `[folder]/` (preserving the original filename)
+2. Use the new `[folder]/filename` path in all subsequent references
+3. Inform the user: "Copied `filename` to the presentation folder."
 
 If the user provides a document, transcript, or notes, extract these elements automatically and propose defaults for each field above.
+
+**After gathering topic and customer, create the presentation folder:**
+
+- Derive `[topic-slug]` from the topic (lowercase, hyphen-separated, e.g., `cortex-ai-overview`)
+- Derive `[customer-slug]` from the customer name if provided (lowercase, hyphen-separated, e.g., `acme-corp`)
+- Create the folder: `[customer-slug]/[topic-slug]/` if a customer was given, otherwise `[topic-slug]/`
+- All artifacts for this presentation (brief, plan, HTML, images) will be written to this folder
+- Inform the user: "Created presentation folder: `[folder-path]`"
 
 **⚠️ MANDATORY STOPPING POINT**: You MUST present these questions to the user and wait for their answers before proceeding. Do NOT skip ahead to planning or building. Even if the user's initial message implies a topic, you must still confirm all nine items (topic/audience, customer, industry, slide count, key points, accent color, speaker notes, custom graphics, presenter slide) with the user before moving to Step 2.
 
@@ -88,7 +106,7 @@ Use the returned brief as the factual foundation for slide copy in Step 2.
 
 **⚠️ Verify customer-specific facts before building:** Statistics returned by the research subagent are estimates — they may be wrong. Any customer-specific number (data volumes, account counts, employee headcounts, revenue figures, growth percentages) MUST be presented to the user for confirmation during Step 2 before being written into the deck. A wrong stat is costly to fix because it typically appears in multiple places: stat cards, SVG `<text>` labels, speaker notes, tooltips, and bullet lists. If a fact cannot be confirmed, omit it rather than using the researched estimate.
 
-**Checkpoint:** Save the brief to `[topic-slug]-brief.md` in the working directory immediately after the subagent returns.
+**Checkpoint:** Save the brief to `[folder]/[topic-slug]-brief.md` immediately after the subagent returns.
 
 ### Step 2: Plan the Slide Deck
 
@@ -107,7 +125,7 @@ Slide N: Takeaway -- Stat Callout + call to action
 
 **⚠️ MANDATORY STOPPING POINT**: Present the slide plan to the user. Do NOT proceed to Step 3 until user explicitly approves.
 
-**Checkpoint:** Once the user approves, save the full slide plan to `[topic-slug]-plan.md` in the working directory before starting the build.
+**Checkpoint:** Once the user approves, save the full slide plan to `[folder]/[topic-slug]-plan.md` before starting the build.
 
 ### Step 3: Build the HTML
 
@@ -177,11 +195,11 @@ For all image/graphics technical details, see `references/graphics-embedding.md`
 
 ### Step 4: Save and Preview
 
-Save the file as `[topic-slug]-slides.html` in the current working directory.
+Save the file as `[folder]/[topic-slug]-slides.html`.
 
 Open in the default browser:
 ```bash
-open [topic-slug]-slides.html
+open [folder]/[topic-slug]-slides.html
 ```
 
 If `open` fails, try `xdg-open` (Linux) or provide the file path for manual opening.
@@ -196,10 +214,10 @@ Inform the user: "Validating the deck — this may take a minute." Then delegate
 
 Prompt:
 ```
-Validate and fix the HTML slide deck at: [DECK_PATH]
+Validate and fix the HTML slide deck at: [folder]/[topic-slug]-slides.html
 
 Step 1: Run the validator with context enabled:
-  python scripts/run_script.py validate_deck.py [DECK_PATH] --context 5
+  python scripts/run_script.py validate_deck.py [folder]/[topic-slug]-slides.html --context 5
 
   The `--context 5` flag prints ±5 lines around each warning/failure, with any base64
   content automatically redacted to `[base64 data omitted — Nkb]`. This gives you all
