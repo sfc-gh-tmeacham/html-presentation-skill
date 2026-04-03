@@ -7,6 +7,18 @@ A skill for [Cortex Code CLI](https://docs.snowflake.com/en/user-guide/cortex-co
 
 ## How to Install This Skill
 
+### Option 1 — Natural language (easiest)
+
+Just paste this into a Cortex Code CLI chat:
+
+```
+I want to import this skill globally from github https://github.com/sfc-gh-tmeacham/html-presentation-skill.git
+```
+
+Cortex Code will handle the rest automatically.
+
+### Option 2 — CLI command
+
 Inside a Cortex Code CLI or SnowWork session, run:
 
 ```
