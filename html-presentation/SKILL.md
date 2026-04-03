@@ -327,114 +327,15 @@ Generate a single self-contained HTML file. No external fonts, CDN links, or ima
 
 For spacing (padding, margin, gap) use `vh`/`vw` or `rem` instead of `px`. When setting a `px` value makes sense (e.g., icon size, border width, border-radius), keep it — but never for layout dimensions or font sizes.
 
-**Navigation:** Arrow keys to move slides, counter in bottom-right, click-to-advance. The navigation block MUST be preceded by `<div class="counter"></div>` — this empty marker is required by `generate_qr_appendix.py` as its insertion point. Always include it:
+**Navigation:** Arrow keys to move slides, counter in bottom-right, click-to-advance. The nav block MUST be preceded by `<div class="counter"></div>` — required by `generate_qr_appendix.py` as its insertion point. Renders as a frosted-glass pill fixed to the bottom-right with accent-colored arrow buttons and a dimmed notes hint on the right.
 
-```html
-<div class="counter"></div>
-<div id="nav">
-  <span class="nbtn" id="prev">&#8592;</span>
-  <span><span id="curr">1</span> / <span id="total">N</span></span>
-  <span class="nbtn" id="next">&#8594;</span>
-  <span id="notes-hint">N = notes</span>
-</div>
-```
+**Slide Transitions:** Fade crossfade using `opacity` + `pointer-events`. Never toggle `display: none / display: flex` — this breaks CSS transitions.
 
-Style the nav as a frosted-glass pill fixed to the bottom-right corner:
+**Speaker Notes:** When the user requests speaker notes, store each slide's notes in a hidden `<div class="speaker-notes">` inside the slide. Two modes are available, mutually exclusive — opening one closes the other:
+- `N` — popup window (ideal for dual-monitor setups)
+- `B` — bottom panel that shrinks the slide area upward (ideal for single-monitor)
 
-```css
-#nav {
-  position: fixed;
-  bottom: clamp(12px, 2vh, 24px);
-  right: clamp(16px, 2vw, 28px);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(26, 26, 26, 0.9);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 18px;
-  font-size: 0.85rem;
-  color: var(--secondary);
-  backdrop-filter: blur(8px);
-  z-index: 100;
-}
-.nbtn {
-  cursor: pointer;
-  color: var(--text);
-  font-size: 1rem;
-  padding: 0 4px;
-  transition: color 0.2s;
-  user-select: none;
-}
-.nbtn:hover { color: var(--accent); }
-#notes-hint { font-size: 0.72rem; color: #555; margin-left: 4px; }
-```
-
-This produces the frosted pill: `← 1 / N →  N = notes` — dark translucent background, rounded pill shape, accent-colored arrow buttons on hover, and a dimmed notes hint on the right.
-
-**Slide Transitions:** Use a fade crossfade between slides. All slides are positioned with `position: absolute; inset: 0;` and start at `opacity: 0` with `pointer-events: none`. The active slide transitions to `opacity: 1` with `pointer-events: auto`. Use a CSS transition of `opacity 0.5s ease`.
-
-```css
-.slide {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.5s ease;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: clamp(1.5rem, 4vh, 3.5rem) clamp(1.5rem, 5vw, 4rem);
-}
-.slide.active {
-  opacity: 1;
-  pointer-events: auto;
-}
-```
-
-Do NOT use `display: none / display: flex` toggling for slide visibility — this prevents CSS transitions from working. Always use opacity + pointer-events instead.
-
-**Speaker Notes:** When the user requests speaker notes, store each slide's notes in a hidden `<div class="speaker-notes">` inside the slide. Pressing `N` opens a separate popup window (`window.open`) that displays the current slide's notes and stays in sync as the presenter navigates.
-
-```js
-let notesWin = null;
-
-function updateNotesWindow() {
-  if (!notesWin || notesWin.closed) return;
-  const notes = slides[current].querySelector('.speaker-notes');
-  const text = notes ? notes.textContent : '';
-  notesWin.document.getElementById('noteText').textContent = text;
-  notesWin.document.getElementById('noteSlide').textContent =
-    'Slide ' + (current + 1) + ' of ' + slides.length;
-}
-
-function openNotesWindow() {
-  if (notesWin && !notesWin.closed) { notesWin.focus(); return; }
-  notesWin = window.open('', 'speaker_notes',
-    'width=520,height=360,left=100,top=100');
-  notesWin.document.write(`<!DOCTYPE html><html><head>
-    <title>Speaker Notes</title><style>
-    body{background:#111;color:#e0e0e0;
-      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
-      Helvetica,Arial,sans-serif;padding:28px 32px;margin:0;}
-    #noteSlide{font-size:13px;text-transform:uppercase;
-      letter-spacing:1.5px;color:var(--accent,#3B82F6);
-      margin-bottom:16px;font-weight:600;}
-    #noteText{font-size:20px;line-height:1.65;color:#d0d0d0;}
-    .hint{position:fixed;bottom:16px;right:20px;
-      font-size:12px;color:#555;}
-    </style></head><body>
-    <div id="noteSlide"></div>
-    <div id="noteText"></div>
-    <div class="hint">Navigate from main window</div>
-  </body></html>`);
-  notesWin.document.close();
-  updateNotesWindow();
-}
-```
-
-Call `updateNotesWindow()` inside the `show()` function, and bind `openNotesWindow()` to the `N` key. Show a small `N = notes window` hint next to the slide counter.
+Read `references/presentation-runtime.md` for the complete nav HTML/CSS, slide transition CSS, and speaker notes CSS/HTML/JS.
 
 **Visuals:** Use inline SVG for diagrams, flow arrows, and progress rings. Use CSS gradients (radial, linear, conic) for decorative slide backgrounds. All visual elements must be self-contained — no external images or assets. Material Icons remain the primary icon system.
 

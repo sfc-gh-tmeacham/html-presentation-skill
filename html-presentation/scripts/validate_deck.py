@@ -87,7 +87,7 @@ SLIDE_ALL_RE = re.compile(
 )
 SLIDE_BLOCK_RE = re.compile(
     r'(<div\b(?=[^>]*\bclass="slide[^"]*")(?=[^>]*\bid="(s[^"]+)")[^>]*>)(.*?)'
-    r'(?=<div\b[^>]*\bclass="slide(?!-)|<div\s+class="nav"|</body>)',
+    r'(?=<div\b[^>]*\bclass="slide(?!-)|<div\b[^>]*\bid="nav"|</body>)',
     re.DOTALL | re.IGNORECASE,
 )
 TOTAL_RE = re.compile(r'<span\s+id="total"[^>]*>\s*(\d+)\s*</span>', re.IGNORECASE)

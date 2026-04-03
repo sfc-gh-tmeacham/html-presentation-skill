@@ -77,13 +77,19 @@ RASTER_EXTENSIONS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 
 PLACEHOLDER_RE = re.compile(r"\{\{IMG:(.+?)\}\}")
 
+_TMP_DIRS: frozenset[Path] = frozenset({
+    Path("/tmp").resolve(),
+    Path(tempfile.gettempdir()).resolve(),
+})
+
 MAX_FILE_SIZE_BYTES: int = 20 * 1024 * 1024
 
 
 def resolve_path(token_path: str, base_dir: Path) -> tuple[Path | None, str | None]:
     """Resolve a placeholder path to an absolute filesystem path.
 
-    Supports tilde expansion and relative paths resolved from *base_dir*.
+    Supports tilde expansion, relative paths resolved from *base_dir*, and
+    absolute paths inside the system temp directory (e.g. /tmp).
     Returns (path, None) on success or (None, error_message) on failure.
     """
     path_str = token_path.strip()
@@ -100,6 +106,11 @@ def resolve_path(token_path: str, base_dir: Path) -> tuple[Path | None, str | No
     if not p.is_absolute():
         p = base_dir / p
     resolved = p.resolve()
+    if any(resolved.is_relative_to(tmp) for tmp in _TMP_DIRS):
+        if not resolved.is_file():
+            return None, f"NOT FOUND: {token_path!r}"
+        return resolved, None
+
     try:
         resolved.relative_to(base_dir.resolve())
     except ValueError:
