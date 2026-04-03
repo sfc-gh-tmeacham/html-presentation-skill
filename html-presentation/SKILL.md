@@ -16,7 +16,7 @@ Before doing anything else, check whether a prior run was interrupted. The prese
 
 Look for checkpoint files inside the presentation folder:
 
-- `[folder]/[topic-slug]-brief.md` — research brief (means Step 1 research is done)
+- `[folder]/[topic-slug]-brief.md` — research brief with sourced, tagged facts (means Step 1 research is done)
 - `[folder]/[topic-slug]-plan.md` — approved slide plan (means Step 2 is done; proceed directly to Step 3)
 - `[folder]/[topic-slug]-[audience-slug]-slides.html` — HTML file exists (means build is done; proceed to Step 5)
 
@@ -93,24 +93,47 @@ Topic: [TOPIC]
 Audience: [AUDIENCE]
 Key points to cover: [KEY_POINTS]
 
+## Accuracy rules (read carefully before writing anything)
+
+**Wrong is 3× worse than unknown.** Do not guess. If you are not confident in a fact, label it
+`[INFERRED]` or omit it entirely. A slide that says "we're not sure of the exact figure" is
+recoverable. A slide with a wrong number in front of a customer is not.
+
+Label every fact, statistic, example, and quote with one of two tags:
+- `[EXTRACTED]` — the information was stated directly in a source you can cite (verbatim or
+  close paraphrase). Include the source inline: `[EXTRACTED] (Source: Name, Year/URL)`
+- `[INFERRED]` — the information is your synthesis, estimation, or logical inference from
+  multiple sources. Include a brief basis: `[INFERRED] (Basis: derived from X and Y)`
+
+For any statistic about a specific named organization (account counts, employee headcount,
+revenue, data volumes, growth percentages), ALSO prefix it with `[UNVERIFIED — confirm with
+customer]` regardless of its EXTRACTED/INFERRED tag.
+
+If you cannot find a credible source for a claim, say so explicitly rather than inventing one.
+
 Return:
-1. 3–5 compelling statistics or data points (with source context). For any statistic about a specific named organization (account counts, employee headcount, revenue, data volumes, growth percentages), prefix it with `[UNVERIFIED — confirm with customer]`.
-2. 2–3 concrete real-world examples or case studies
-3. 1–2 strong quotes from credible sources
+1. 3–5 compelling statistics or data points — each tagged [EXTRACTED] or [INFERRED] with citation
+2. 2–3 concrete real-world examples or case studies — each tagged with source
+3. 1–2 strong quotes from credible sources — [EXTRACTED] only; do not fabricate quotes
 4. Key terminology or concepts the audience needs to know
 5. Common objections or questions the audience may raise
 6. Suggested narrative arc: problem → insight → solution → outcome
 
-If `exec_mode` is true: restructure the narrative arc as **conclusion → evidence → context** (BLUF order). The executive already knows the problem — lead with the recommendation, then prove it, then provide context only if needed.
+If `exec_mode` is true: restructure the narrative arc as **conclusion → evidence → context** (BLUF
+order). The executive already knows the problem — lead with the recommendation, then prove it, then
+provide context only if needed.
 
 Be specific. Format as a structured markdown brief. Do not write slide copy — only gather raw material.
 ```
 
 Use the returned brief as the factual foundation for slide copy in Step 2.
 
-**⚠️ Verify customer-specific facts before building:** Statistics returned by the research subagent are estimates — they may be wrong. Any customer-specific number (data volumes, account counts, employee headcounts, revenue figures, growth percentages) MUST be presented to the user for confirmation during Step 2 before being written into the deck. A wrong stat is costly to fix because it typically appears in multiple places: stat cards, SVG `<text>` labels, speaker notes, tooltips, and bullet lists. If a fact cannot be confirmed, omit it rather than using the researched estimate.
+**⚠️ Accuracy calibration — wrong is 3× worse than unknown:** Before using any fact from the brief in slide copy, check its tag:
+- `[EXTRACTED]` facts may be used directly; cite the source in speaker notes.
+- `[INFERRED]` facts must be presented to the user for confirmation before being written into slide copy.
+- `[UNVERIFIED — confirm with customer]` facts MUST be confirmed by the user during Step 2 before being placed in the deck. A wrong stat is costly to fix because it typically appears in multiple places: stat cards, SVG `<text>` labels, speaker notes, tooltips, and bullet lists. **If a fact cannot be confirmed, omit it — never use the researched estimate.**
 
-**Checkpoint:** Save the brief to `[folder]/[topic-slug]-brief.md` immediately after the subagent returns.
+**Checkpoint:** Save the full brief (with all tags and citations intact) to `[folder]/[topic-slug]-brief.md` immediately after the subagent returns. This file is a citable research artifact — do not strip or summarize the tags and sources when saving.
 
 ### Step 2: Plan the Slide Deck
 
@@ -430,7 +453,7 @@ Read `references/presentation-runtime.md` for the complete nav HTML/CSS, slide t
     - **No rotated text.** `transform="rotate(...)"` on a `<text>` element almost always means the container is too narrow. Fix it by widening the container, using a multi-line label, or redesigning the output as a proper readable box.
     - **SVG `max-height` ≥ 58vh.** Diagrams with `max-height: 52vh` or lower render too small and leave large empty black bands below them on the slide. Use at least `58vh`; `65vh` is preferred for full-width architecture diagrams.
 17. **When removing a stat card from a grid, update the column count.** Dropping a card from `grid-template-columns:repeat(4,1fr)` without updating the repeat value leaves remaining cards stretched across empty columns. Always update `repeat(N,1fr)` to match the actual number of cards remaining.
-18. **Omit uncertain facts rather than guessing.** If a customer-specific figure cannot be confirmed by the user, remove it entirely. An omission is always safer than a wrong number in a customer-facing presentation — and wrong numbers tend to appear in 5–7 places at once.
+18. **Wrong is 3× worse than unknown — omit unconfirmed facts.** If a customer-specific figure or any `[INFERRED]` fact cannot be confirmed by the user, remove it entirely. An omission is always safer than a wrong number in a customer-facing presentation — and wrong numbers tend to appear in 5–7 places at once. When in doubt, say "we're exploring this" rather than stating an unverified figure.
 19. **SVG diagram boxes must be sized to fit their text — never guess.** Size each `<rect>` width to the longest label it contains. Default to ≥ 200px for any box with a function name, SQL keyword, or long token (e.g., `SYSTEM$STREAM_HAS_DATA()`). Add at least 24px total horizontal padding. Expand the SVG `viewBox` width to match — never let a box clip its label. For single-column flow diagrams, `viewBox="0 0 260 H"` with `cx=130` is a safe default.
 20. **Executive decks use BLUF structure and action titles (exec_mode).** When `exec_mode` is true:
     - Every slide `<h2>` title MUST be a **declarative assertion** — a sentence that states the conclusion — not a noun label.
