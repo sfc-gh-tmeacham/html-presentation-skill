@@ -79,11 +79,11 @@ If the user provides a document, transcript, or notes, extract these elements au
 
 ### Research Subagent (optional — knowledge-heavy topics)
 
-If the topic is knowledge-driven (technology, business case, data analysis, product capabilities) and the user did **not** supply their own notes, document, or transcript, launch a `generalPurpose` subagent **before** Step 2 to build a factual brief. Skip this if the user provided their own content.
+If the topic is knowledge-driven (technology, business case, data analysis, product capabilities) and the user did **not** supply their own notes, document, or transcript, launch a `general-purpose` subagent **before** Step 2 to build a factual brief. Skip this if the user provided their own content.
 
 **Before launching**, inform the user: "Researching your topic — this may take a minute or two."
 
-**Subagent type:** `generalPurpose` | **readonly:** `true`
+**Subagent type:** `general-purpose` | **readonly:** `true`
 
 Prompt:
 ```
@@ -240,7 +240,7 @@ If `open` fails, try `xdg-open` (Linux) or provide the file path for manual open
 
 Inform the user: "Validating the deck — this may take a minute." Then delegate the automated validation and fix cycle to a subagent — this keeps error output and large HTML reads out of the main context.
 
-**Subagent type:** `generalPurpose` | **readonly:** `false`
+**Subagent type:** `general-purpose` | **readonly:** `false`
 
 Prompt:
 ```
