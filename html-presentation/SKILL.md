@@ -26,6 +26,14 @@ If no checkpoint files exist, proceed normally from Step 1.
 
 ---
 
+### Bash rules (apply everywhere in this skill)
+
+- **Never use bash heredoc syntax (`<<EOF`, `<<'EOF'`).** It is fragile in agentic contexts. Use Python, the `write` tool, or single-quoted strings instead.
+- **Never use multi-line bash `while read` loops.** Use Python one-liners or scripts for any multi-line logic.
+- When a bash command needs to span multiple logical steps, break it into separate sequential tool calls rather than chaining with heredoc or loops.
+
+---
+
 ### Step 1: Gather Content
 
 Ask the user for:
@@ -137,10 +145,16 @@ Use the returned brief as the factual foundation for slide copy in Step 2.
 
 **URL validation (mandatory after saving brief):** Extract every URL from the brief and verify it resolves. Run:
 ```bash
-grep -oE 'https?://[^) >"\n]+' [folder]/[topic-slug]-brief.md | sort -u | while read url; do
-  status=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 10 "$url")
-  echo "$status $url"
-done
+python3 -c "
+import re, urllib.request, sys
+urls = sorted(set(re.findall(r'https?://[^\s)>\"]+', open('[folder]/[topic-slug]-brief.md').read())))
+for u in urls:
+    try:
+        code = urllib.request.urlopen(u, timeout=10).status
+    except Exception as e:
+        code = str(e)
+    print(code, u)
+"
 ```
 For any URL that returns a non-200 status or times out:
 1. Mark it `[DEAD LINK]` inline in the brief file
@@ -242,13 +256,19 @@ When in doubt, use 5. Smaller batches add one extra `edit` call but prevent losi
 
 If the deck has no user-provided images (only Material Icons, inline SVGs, and CSS graphics), skip the embed phase — the HTML is already self-contained.
 
-**4. URL validation phase** — After the QR appendix is generated, verify that every external link in the deck resolves successfully. Extract all `href` URLs (excluding SVG namespace and font CDN entries):
+**4. URL validation phase** — After the QR appendix is generated, verify that every external link in the deck resolves successfully. Run:
 ```bash
-grep -oE 'href="https?://[^"]+' <deck.html> | sed 's/href="//' | grep -v 'googleapis.com' | sort -u
-```
-For each URL, check its HTTP status:
-```bash
-curl -sL -o /dev/null -w "%{http_code} %{url_effective}\n" "<URL>"
+python3 -c "
+import re, urllib.request
+urls = sorted(set(re.findall(r'href=\"(https?://[^\"]+)', open('<deck.html>').read())))
+urls = [u for u in urls if 'googleapis.com' not in u]
+for u in urls:
+    try:
+        code = urllib.request.urlopen(u, timeout=10).status
+    except Exception as e:
+        code = str(e)
+    print(code, u)
+"
 ```
 Any URL returning a non-200 status MUST be replaced with a live equivalent before proceeding. After fixing any broken URLs, re-run `generate_qr_appendix.py` — it is idempotent and will rebuild QR codes to encode the corrected links. Do not proceed to Step 4 with unresolved broken links.
 
