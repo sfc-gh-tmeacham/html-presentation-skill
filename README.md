@@ -12,7 +12,7 @@ A skill for [Cortex Code CLI](https://docs.snowflake.com/en/user-guide/cortex-co
 Just paste this into a Cortex Code CLI chat:
 
 ```
-I want to import this skill as a user skill from github https://github.com/sfc-gh-tmeacham/html-presentation-skill.git
+I want to import this skill as a local skill from github https://github.com/sfc-gh-tmeacham/html-presentation-skill.git
 ```
 
 Cortex Code will handle the rest automatically.
