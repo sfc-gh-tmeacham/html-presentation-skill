@@ -27,6 +27,17 @@ Checks performed:
    ``text-align: left`` (Rule 12)
 15. **SVG max-height** — warns when SVG containers use ``max-height`` below
    58vh, which causes empty bands on slides (Rule 16)
+16. **Nav HTML structure** — fails if ``<span id="prev">``, ``<span id="next">``,
+   ``<span id="curr">``, ``<span id="notes-hint">``, or ``class="nbtn"`` spans
+   are absent; warns if ``<button>`` elements are found inside ``#nav``
+17. **Notes panel HTML** — fails if ``id="notes-panel"``, ``id="notes-panel-text"``,
+   or ``id="notes-panel-close"`` are missing (when speaker notes present)
+18. **Notes CSS** — warns on each missing required rule: ``.speaker-notes``
+   display:none, ``#deck.panel-open`` height calc, ``body.panel-open #nav``
+   (when speaker notes present)
+19. **JS wiring** — fails if legacy ``toggleNotes()`` found; warns if
+   ``openNotesWindow``, ``openNotesPanel``, ``closeNotesPanel``, or N/B
+   key bindings are absent (when speaker notes present)
 
 Usage::
 
@@ -151,6 +162,28 @@ APPENDIX_BLOCK_RE = re.compile(
 QR_SIZE_RE = re.compile(r'width\s*:\s*220px', re.IGNORECASE)
 BASE64_LINE_RE = re.compile(r'src="data:|;base64,', re.IGNORECASE)
 LINE_REF_RE = re.compile(r'\bline (\d+)\b')
+
+NAV_PREV_RE = re.compile(r'<span\b[^>]*id="prev"[^>]*>', re.IGNORECASE)
+NAV_NEXT_RE = re.compile(r'<span\b[^>]*id="next"[^>]*>', re.IGNORECASE)
+NAV_CURR_RE = re.compile(r'<span\b[^>]*id="curr"[^>]*>', re.IGNORECASE)
+NAV_HINT_RE = re.compile(r'<span\b[^>]*id="notes-hint"[^>]*>', re.IGNORECASE)
+NAV_NBTN_RE = re.compile(r'<span\b[^>]*class="[^"]*nbtn[^"]*"', re.IGNORECASE)
+NAV_BUTTON_IN_NAV_RE = re.compile(r'id="nav".*?<button\b', re.DOTALL | re.IGNORECASE)
+
+NOTES_PANEL_RE = re.compile(r'\bid="notes-panel"', re.IGNORECASE)
+NOTES_PANEL_TEXT_RE = re.compile(r'\bid="notes-panel-text"', re.IGNORECASE)
+NOTES_PANEL_CLOSE_RE = re.compile(r'\bid="notes-panel-close"', re.IGNORECASE)
+
+CSS_SPEAKER_NOTES_HIDE_RE = re.compile(r'\.speaker-notes\s*\{[^}]*display\s*:\s*none', re.IGNORECASE)
+CSS_DECK_PANEL_OPEN_RE = re.compile(r'#deck\.panel-open\s*\{[^}]*height\s*:\s*calc\(100vh\s*-\s*180px\)', re.IGNORECASE)
+CSS_BODY_PANEL_NAV_RE = re.compile(r'body\.panel-open\s+#nav\s*\{', re.IGNORECASE)
+
+JS_OPEN_NOTES_WIN_RE = re.compile(r'function\s+openNotesWindow\s*\(')
+JS_OPEN_PANEL_RE = re.compile(r'function\s+openNotesPanel\s*\(')
+JS_CLOSE_PANEL_RE = re.compile(r'function\s+closeNotesPanel\s*\(')
+JS_KEY_N_RE = re.compile(r"""['"]N['"]\s*:.*?openNotesWindow|case\s+['"]N['"]\s*[:\n].*?openNotesWindow""", re.DOTALL)
+JS_KEY_B_RE = re.compile(r"""['"]B['"]\s*:.*?[Pp]anel|case\s+['"]B['"]\s*[:\n].*?[Pp]anel""", re.DOTALL)
+JS_TOGGLE_NOTES_RE = re.compile(r'\btoggleNotes\s*\(')
 
 MAX_CONTEXT_ISSUES = 10
 MAX_REFS_PER_ISSUE = 2
@@ -471,6 +504,82 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         )
     else:
         passes.append(f"SVG container max-height is >= {MIN_SVG_VH}vh (or not set via inline style)")
+
+    # 16. Nav HTML structure
+    nav_fails = []
+    if not NAV_PREV_RE.search(html):
+        nav_fails.append('<span id="prev"> missing')
+    if not NAV_NEXT_RE.search(html):
+        nav_fails.append('<span id="next"> missing')
+    if not NAV_CURR_RE.search(html):
+        nav_fails.append('<span id="curr"> missing')
+    if not NAV_HINT_RE.search(html):
+        nav_fails.append('<span id="notes-hint"> missing')
+    if not NAV_NBTN_RE.search(html):
+        nav_fails.append('no <span class="nbtn"> elements found (spec requires spans, not buttons)')
+    if nav_fails:
+        fails.append(f"Nav HTML structure: {'; '.join(nav_fails)}")
+    else:
+        passes.append("Nav HTML structure: prev/next/curr/notes-hint/nbtn all present")
+    if NAV_BUTTON_IN_NAV_RE.search(html):
+        warns.append('Nav contains <button> elements — spec requires <span class="nbtn"> instead')
+
+    # 17. Notes panel HTML (only when speaker notes present)
+    if notes_count > 0:
+        panel_fails = []
+        if not NOTES_PANEL_RE.search(html):
+            panel_fails.append('id="notes-panel" missing')
+        if not NOTES_PANEL_TEXT_RE.search(html):
+            panel_fails.append('id="notes-panel-text" missing')
+        if not NOTES_PANEL_CLOSE_RE.search(html):
+            panel_fails.append('id="notes-panel-close" missing')
+        if panel_fails:
+            fails.append(f"Notes panel HTML: {'; '.join(panel_fails)}")
+        else:
+            passes.append("Notes panel HTML: notes-panel/notes-panel-text/notes-panel-close all present")
+
+    # 18. Notes CSS (only when speaker notes present)
+    if notes_count > 0:
+        style_text = " ".join(STYLE_TAG_RE.findall(html))
+        css_warns = []
+        if not CSS_SPEAKER_NOTES_HIDE_RE.search(style_text):
+            css_warns.append(".speaker-notes { display: none } rule missing")
+        if not CSS_DECK_PANEL_OPEN_RE.search(style_text):
+            css_warns.append("#deck.panel-open { height: calc(100vh - 180px) } rule missing")
+        if not CSS_BODY_PANEL_NAV_RE.search(style_text):
+            css_warns.append("body.panel-open #nav rule missing")
+        if css_warns:
+            for w in css_warns:
+                warns.append(f"Notes CSS: {w}")
+        else:
+            passes.append("Notes CSS: speaker-notes/deck.panel-open/body.panel-open rules all present")
+
+    # 19. JS wiring (only when speaker notes present)
+    if notes_count > 0:
+        script_text = " ".join(SCRIPT_TAG_RE.findall(html))
+        if JS_TOGGLE_NOTES_RE.search(script_text):
+            fails.append(
+                "JS wiring: toggleNotes() found — old pattern; "
+                "replace with openNotesWindow / openNotesPanel / closeNotesPanel"
+            )
+        else:
+            js_warns = []
+            if not JS_OPEN_NOTES_WIN_RE.search(script_text):
+                js_warns.append("openNotesWindow() not defined")
+            if not JS_OPEN_PANEL_RE.search(script_text):
+                js_warns.append("openNotesPanel() not defined")
+            if not JS_CLOSE_PANEL_RE.search(script_text):
+                js_warns.append("closeNotesPanel() not defined")
+            if not JS_KEY_N_RE.search(script_text):
+                js_warns.append("'N' key binding for openNotesWindow not found")
+            if not JS_KEY_B_RE.search(script_text):
+                js_warns.append("'B' key binding for panel toggle not found")
+            if js_warns:
+                warns.append(f"JS wiring: {'; '.join(js_warns)}")
+            else:
+                passes.append(
+                    "JS wiring: openNotesWindow/openNotesPanel/closeNotesPanel and N/B bindings all present"
+                )
 
     return passes, warns, fails
 
