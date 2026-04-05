@@ -164,6 +164,7 @@ Map each slide to a visual component (see `references/visual-components.md`). Pr
 Slide 1: Title -- "Topic Name" with subtitle + accent gradient
 Presenter: [if requested] Name, title, and optional headshot for each presenter (does not count toward slide max)
 Agenda: Icon + Label List of thematic sections (does not count toward slide max)
+BLUF: Bottom Line Up Front — 2–4 card summary of the key takeaways (does not count toward slide max)
 Slide 2: Setup -- Frame the problem or context
 Slide 3: Core -- Card Grid with 3 key concepts
 Slide 4: Core -- Step Flow showing the process
@@ -343,6 +344,8 @@ Every deck follows this proven flow:
 | Slide | Purpose | Content |
 |-------|---------|---------|
 | **1. Title** | Set the stage | Big title, subtitle, your name or brand |
+| **Agenda** | Orient the audience | Numbered card grid of 3–6 thematic sections (not counted toward slide max) |
+| **BLUF** | Bottom Line Up Front | 3-card summary stating the key takeaways upfront (not counted toward slide max) |
 | **2. Setup** | Frame the problem or context | Why this matters, what the audience will learn |
 | **3-8. Core Content** | Deliver the meat | One idea per slide, each with a visual component |
 | **9. Evidence** | Prove your point | Stats, quotes, case studies, examples |
@@ -370,7 +373,7 @@ Cap executive decks at **7 content slides**. No Agenda slide.
 - If there are **three or more presenters**: use a card grid (2 or 3 columns) with one card per presenter. Maximum of 9 presenters — `insert_presenter.py` will error if this limit is exceeded.
 - If **no headshot is provided** for a presenter, display a Material Icon placeholder (`person` icon, `clamp(3rem, 5vw, 4.5rem)`, accent-colored) inside the circle instead.
 - Stagger the card/column animations for sequential reveal.
-- The heading should be a small uppercase `h3` label ("Presented By" or "Your Presenters") with the accent color.
+- The heading should be a small uppercase `h3` label (e.g., "Presented By", "Your Presenters", "Meet the Team") with the accent color.
 - **All presenter headshots MUST be circularly cropped using CSS** (`border-radius: 50%; object-fit: cover; width/height equal`). Do NOT pre-crop the source image.
 - Headshot images must be processed through the Graphics Embedding Rules (see `references/graphics-embedding.md`).
 
@@ -378,14 +381,16 @@ For HTML patterns, see the **Presenter Slide** section in `references/visual-com
 
 **Agenda Slide (mandatory):** Every deck MUST include an Agenda slide immediately after the Title slide (or after the Presenter slide, if present). The Agenda does NOT count toward the slide count max. List 3-6 thematic sections (not every individual slide).
 
+**BLUF Slide (mandatory):** Every non-exec deck MUST include a BLUF (Bottom Line Up Front) slide immediately after the Agenda slide. The BLUF does NOT count toward the slide count max. Use a card layout (2–4 cards) where each card states one key takeaway the audience will leave with — written as a concrete outcome, not a topic label. Keep each card to a headline (bold, white) + 1–2 sentence elaboration (secondary color). Use a relevant Material Icon per card (accent-colored). The eyebrow `h3` should be a short, contextually appropriate label.
+
 **Agenda visual rules:**
 - Use a **numbered grid of cards** (2 or 3 columns), one card per section
 - Each card gets: a Material Icon (accent-colored, `clamp(1.5rem, 2.5vw, 2rem)`), a bold section title (`clamp(0.9rem, 1.4vw, 1.2rem)` white), and a one-line descriptor (`clamp(0.75rem, 1.1vw, 1rem)` secondary color)
 - Cards use the standard card style (`background: var(--card)`, `border: 1px solid var(--border)`, `border-radius: 12-16px`, `padding: 20-24px`)
 - Add a subtle accent-colored number or left border to each card to reinforce sequence
 - Stagger the card animations for sequential reveal
-- The heading should be a small uppercase `h3` label ("Agenda" or "What We'll Cover") with the accent color, NOT a large `h2`
-- Do NOT use a plain left-aligned text list — the agenda must look as polished as any other slide
+- The heading should be a small uppercase `h3` label (e.g., "Agenda", "What We'll Cover", "Today's Session") with the accent color, NOT a large `h2`
+- Prefer a card grid over a plain text list — it looks more polished and consistent with the rest of the deck. A simple icon list is acceptable for short agendas (3 items or fewer) where a card grid would feel heavy.
 
 Example HTML structure:
 ```html
@@ -468,7 +473,7 @@ Read `references/presentation-runtime.md` for the complete nav HTML/CSS, slide t
 15. **Architecture and flow diagrams must be full-width and readable.** Any SVG diagram with 4+ nodes, branching paths, or multi-level structure MUST use a **full-width layout** — never place it in a two-column grid where it gets half the slide. Shrinking a complex diagram to fit alongside a bullet list makes it unreadable. Instead, use one of these layouts:
     - **Full-width diagram** (SVG spans the slide width, `width="100%"` or `width="720"`) with a compact 2-column icon list *below* the diagram.
     - **Diagram-only slide** where the architecture is the entire content with labels embedded in the SVG.
-    - A two-column layout is only acceptable for **simple 2–3 node diagrams** (e.g., a single flow arrow between two boxes).
+    - A two-column layout is only acceptable for simple, linear diagrams where each element remains clearly readable at half-slide width.
     Minimum readable sizes: node box height ≥ 36px; label `font-size` ≥ 12 (in viewBox units); connector arrow length ≥ 16px. If a diagram would need text smaller than 12px to fit in a column, it MUST be promoted to full-width.
 16. **SVG layout integrity — four hard rules:**
     - **No overlapping rects.** For each column of stacked `<rect>` boxes, verify `y_N + height_N < y_(N+1)` before writing. Overlapping boxes silently clip text — the browser renders both without error. Require a minimum 10px gap between boxes.
@@ -482,7 +487,7 @@ Read `references/presentation-runtime.md` for the complete nav HTML/CSS, slide t
     - Every slide `<h2>` title MUST be a **declarative assertion** — a sentence that states the conclusion — not a noun label.
       - ❌ `"Data Architecture"` → ✅ `"Snowflake Eliminates Data Silos Without Migration Risk"`
       - ❌ `"Key Benefits"` → ✅ `"Three Capabilities That Directly Reduce Your Cost Per Query"`
-    - The Executive Summary slide (s2) MUST use a **CTA Block or Stat Callout** — one bold statement, one supporting line, one key metric if available. No bullet lists. No context before this slide.
+    - The Executive Summary slide (s2) should use a high-impact component — a CTA Block, Stat Callout, or similar — with one bold statement, one supporting line, and a key metric if available. No bullet lists. No context before this slide.
     - **Cap the deck at 7 content slides.** If content does not fit, cut it — never add slides.
     - **Skip the Agenda slide entirely.** Executives prefer to reach the point immediately.
 
