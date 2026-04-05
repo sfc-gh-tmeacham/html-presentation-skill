@@ -449,3 +449,71 @@ Use for the optional presenter slide immediately after the Title slide. See SKIL
   <!-- repeat for each presenter -->
 </div>
 ```
+
+---
+
+## Title Slide
+
+Use for the opening slide of any deck. Features an animated gradient background, ambient glow orbs, the Snowflake logo, and a center-stacked heading group.
+
+**Required CSS** — add to the deck's `<style>` block:
+
+```css
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.gradient-bg {
+  background: linear-gradient(135deg, #0a0a0a, #0d1f2d, #0a0a0a, #0d1a10);
+  background-size: 400% 400%;
+  animation: gradientShift 12s ease infinite;
+}
+```
+
+**Apply to the slide div:**
+
+```html
+<div id="s1" class="slide gradient-bg active">
+```
+
+**Full title slide body:**
+
+```html
+<div id="s1" class="slide gradient-bg active">
+  <!-- Ambient glow orbs -->
+  <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;">
+    <div style="position:absolute;top:-180px;right:-180px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(41,181,232,0.12),transparent 70%);"></div>
+    <div style="position:absolute;bottom:-150px;left:-150px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(41,181,232,0.08),transparent 70%);"></div>
+  </div>
+  <div class="slide-inner" style="text-align:center;">
+    <!-- Snowflake logo -->
+    <div class="anim" style="margin-bottom:0.5rem;">
+      <svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" aria-label="Snowflake" role="img"
+        style="display:block;margin:0 auto clamp(10px,2vh,18px);height:clamp(44px,7vh,80px);width:auto;">
+        <!-- paste Snowflake SVG paths here -->
+      </svg>
+    </div>
+    <!-- Category / industry label -->
+    <h3 class="anim" style="transition-delay:0.1s;">Category or Industry Name</h3>
+    <!-- Main title — gradient text -->
+    <h2 class="anim" style="transition-delay:0.2s;font-size:clamp(2.8rem,5vw,5rem);background:linear-gradient(135deg,#ffffff 40%,#29B5E8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+      Presentation Title
+    </h2>
+    <!-- Subtitle -->
+    <p class="anim" style="transition-delay:0.3s;font-size:clamp(1.3rem,2.2vw,2rem);color:var(--secondary);">Subtitle or Pillar Name</p>
+    <!-- Accent divider -->
+    <div class="anim" style="transition-delay:0.4s;width:60px;height:3px;background:var(--accent);border-radius:2px;margin:0.25rem auto;"></div>
+    <!-- Tagline / descriptor -->
+    <p class="anim" style="transition-delay:0.5s;font-size:clamp(0.85rem,1.2vw,1rem);color:#555;margin-top:0.25rem;">Key theme · Key theme · Key theme</p>
+  </div>
+  <div class="speaker-notes">Speaker notes here.</div>
+</div>
+```
+
+**Key style decisions:**
+- `gradient-bg` class drives the slow animated background — add the CSS above to every deck that uses this layout
+- Gradient text on `h2` uses `background:linear-gradient(135deg,#ffffff 40%,#29B5E8)` with `-webkit-background-clip:text` — white bleeds into Snowflake blue
+- Glow orbs use `position:absolute` with `pointer-events:none` so they don't block clicks; place them inside the slide div before `.slide-inner`
+- Accent divider is 60 × 3px — use it between the subtitle and tagline to add visual rhythm
+- All children use `class="anim"` with staggered `transition-delay` for entrance animation
