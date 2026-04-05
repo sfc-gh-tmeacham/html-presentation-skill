@@ -26,7 +26,9 @@ Look for checkpoint files inside the presentation folder:
 
 - `[folder]/[topic-slug]-brief.md` — research brief with sourced, tagged facts (means Step 1 research is done)
 - `[folder]/[topic-slug]-plan.md` — approved slide plan (means Step 2 is done; proceed directly to Step 3)
-- `[folder]/[topic-slug]-[audience-slug]-slides.html` — HTML file exists (means build is done; proceed to Step 5)
+- `[folder]/[topic-slug]-[audience-slug]-slides.html` — HTML file exists. Inspect its content:
+  - Contains `<!-- INSERT_SLIDE_N -->` → build is in progress; resume from slide N (skip all slides before N and continue inserting from there)
+  - No such marker → build is complete; proceed to Step 5
 
 If checkpoint files exist, read them and resume from the furthest completed step. Inform the user: "Found a prior checkpoint — resuming from Step N."
 
@@ -206,42 +208,43 @@ Generate a single self-contained HTML file following the Slide Structure, HTML O
 
 **Inlining the Snowflake logo (if selected in Step 1):** Place a bare `{{SNOWFLAKE_LOGO}}` token on its own line as the **first child inside `.slide-inner`** on the title slide (before the `<h3>` eyebrow). The `embed_image.py` embed phase will replace it with the correct inline `<svg>` block automatically — do NOT read any SVG file, do NOT write any `<svg>` or `<path>` markup manually.
 
-**Iterative Batch-Build (required for 13+ slides):**
+**Shell-First, Slide-by-Slide Build (required for all decks):**
 
-Large decks written in a single `write` call risk context timeouts — a partial write is worse than no file. Instead, always use the batch approach:
+Always build the deck in two phases to prevent data loss from context timeouts or interruptions. The file is saved after every single slide — the worst-case of any interruption is losing one slide in progress.
 
-1. **Batch 1 — Shell + first slides**: Write the complete HTML structure (all `<head>`, CSS, opening `<div id="deck">`) plus slides **s1 through s10** (or fewer if the deck is shorter). Close with a placeholder comment before the closing tags:
+**Phase 1 — Write the shell (once):**
+
+Write the complete HTML structure — all `<head>`, CSS, opening `<div id="deck">`, the `<div class="counter"></div>` marker, nav, and `<script>` — but with only a placeholder inside the deck div. Save the file immediately (use the Python write workaround for large shells if needed).
+
+The `<span id="total">` counter MUST reflect the **final** slide count from the approved plan from the start — the JS is correct from the beginning.
+
+Shell placeholder inside the deck div:
+```html
+<div id="deck">
+<!-- INSERT_SLIDE_1 -->
+</div><!-- end #deck -->
+```
+
+After the shell is saved, add every slide as an individual `pending` task in `system_todo_write`, mark the shell task `completed`, and inform the user: "Shell saved — building slides now."
+
+**Phase 2 — Insert one slide at a time:**
+
+For each slide N in the approved plan:
+
+1. Generate the complete HTML for that slide.
+2. Use `edit` to replace `<!-- INSERT_SLIDE_N -->` with the slide HTML plus the next placeholder:
    ```html
-   <!-- SLIDES_REMAINING -->
-   
-   </div><!-- end #deck -->
-   <div class="counter"></div>
-   <div id="nav">...</div>
-   <script>...</script>
-   </body></html>
+   <div id="sN" class="slide">
+     ...slide content...
+   </div>
+   <!-- INSERT_SLIDE_(N+1) -->
    ```
-   The `<span id="total">` counter should reflect the **final** slide count (including all planned batches) even in Batch 1 — the JS is already correct from the start.
+3. For the **final slide**, omit the new placeholder — the file is complete when no marker remains.
+4. Immediately mark slide N `completed` in `system_todo_write` before generating the next slide.
 
-2. **Batch 2 — Next slides**: Use `edit` to replace `<!-- SLIDES_REMAINING -->` with the next batch of slides (s11–s20) plus a new placeholder:
-   ```html
-   [s11 ... s20 HTML]
-   
-   <!-- SLIDES_REMAINING_2 -->
-   ```
+**Resuming after interruption:**
 
-3. **Subsequent batches**: Repeat — each `edit` replaces the latest `<!-- SLIDES_REMAINING_N -->` placeholder with the next batch of ~10 slides plus a new placeholder (or nothing for the final batch).
-
-4. **Final batch**: The last `edit` replaces the final placeholder with the remaining slides and **no new placeholder**. The file is now complete.
-
-**Batch sizing guideline:** Size batches by complexity, not just count:
-- **5 slides per batch** when the batch includes 2+ SVG-heavy slides (architecture diagrams, step flows, inline SVG illustrations)
-- **10 slides per batch** for simpler content (card grids, stat callouts, quotes, icon lists)
-
-When in doubt, use 5. Smaller batches add one extra `edit` call but prevent losing a large amount of work to a context timeout mid-write.
-
-**For decks of 12 slides or fewer:** A single `write` call is fine — use the standard approach.
-
-**Mark each batch complete in the todo list** before starting the next (`system_todo_write` with status `completed`), so progress is preserved if the session is interrupted. Resume from the last completed batch using the `<!-- SLIDES_REMAINING_N -->` placeholder as the insertion point.
+If the HTML shell already exists when Phase 2 starts, search the file for `<!-- INSERT_SLIDE_N -->` to find the current resume point. Skip all slides before N and continue inserting from slide N. Inform the user: "Resuming from slide N."
 
 **Two-phase build (when the deck includes user-provided images, SVGs, or the Snowflake logo):**
 1. **Author phase** — Write the HTML with placeholder tokens. Do NOT write any `<svg>`/`<path>` markup or base64 strings during this phase.
