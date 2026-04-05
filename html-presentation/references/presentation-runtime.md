@@ -84,6 +84,8 @@ Two modes, mutually exclusive — opening one closes the other:
 - `N` — popup window (ideal for dual-monitor setups)
 - `B` — bottom panel that shrinks the slide area upward (ideal for single-monitor)
 
+**Formatting rule:** Text the presenter reads aloud is plain prose. Any text **not** meant to be spoken — stage directions, click cues, reminders, asides — MUST be wrapped in square brackets: `[Pause here]`, `[Click to advance]`, `[Reference the chart on the left]`. The presenter skips bracketed content when speaking.
+
 ### CSS
 
 Add after `.speaker-notes { display: none; }`:

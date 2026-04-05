@@ -451,6 +451,8 @@ For spacing (padding, margin, gap) use `vh`/`vw` or `rem` instead of `px`. When 
 **Slide Transitions:** Fade crossfade using `opacity` + `pointer-events`. Never toggle `display: none / display: flex` — this breaks CSS transitions.
 
 **Speaker Notes:** When the user requests speaker notes, store each slide's notes in a hidden `<div class="speaker-notes">` inside the slide. Two modes are available, mutually exclusive — opening one closes the other:
+
+**Speaker notes formatting rule:** Text the presenter reads aloud appears as plain prose. Any text **not** meant to be spoken — stage directions, click cues, reminders, asides — MUST be wrapped in square brackets: `[Pause here]`, `[Click to advance]`, `[Reference the chart on the left]`. The presenter knows to skip bracketed content when speaking.
 - `N` — popup window (ideal for dual-monitor setups)
 - `B` — bottom panel that shrinks the slide area upward (ideal for single-monitor)
 
