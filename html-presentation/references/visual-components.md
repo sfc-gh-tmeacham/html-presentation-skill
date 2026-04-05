@@ -2,6 +2,11 @@
 
 Every slide MUST use at least one of these components. Text-only slides are not allowed.
 
+**Required rules (validator-enforced):**
+- **External links:** Every `<a href="https://...">` MUST include `target="_blank" rel="noopener"` — the validator fails any external anchor missing either attribute.
+- **List alignment:** Every `<ul>` and `<ol>` MUST include `text-align:left` as an inline style or via a CSS class — prevents misalignment when a parent container centers text.
+- **Connector arrows and flow lines MUST use `var(--accent)` or a bright visible color — NEVER `var(--border)`, dark gray, or any color that blends into the dark slide background.** This applies to: Material Icon `arrow_forward` between step flow cards, SVG `<line>` and `<path>` connectors in architecture/inline diagrams, and any other visual connector element. Invisible arrows defeat the purpose of a flow diagram.
+
 ---
 
 ## Card Grid
@@ -30,9 +35,9 @@ Use for: old vs new, before vs after, tool A vs tool B.
 
 ```html
 <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:32px;align-items:start;width:100%;">
-  <div class="card"><h4>Option A</h4><ul class="icon-list">...</ul></div>
+  <div class="card"><h4>Option A</h4><ul class="icon-list" style="list-style:none;padding:0;text-align:left;">...</ul></div>
   <div style="width:1px;background:var(--border);align-self:stretch;"></div>
-  <div class="card"><h4>Option B</h4><ul class="icon-list">...</ul></div>
+  <div class="card"><h4>Option B</h4><ul class="icon-list" style="list-style:none;padding:0;text-align:left;">...</ul></div>
 </div>
 ```
 
@@ -62,7 +67,7 @@ Use for: processes, tutorials, how-it-works.
     <h4>Step Name</h4>
     <p style="font-size:14px;">Description</p>
   </div>
-  <span class="material-icons-round" style="color:var(--border);font-size:32px;">arrow_forward</span>
+  <span class="material-icons-round" style="color:var(--accent);font-size:32px;">arrow_forward</span>
   <!-- repeat -->
 </div>
 ```
@@ -90,7 +95,7 @@ Use for: feature lists, checklists, requirements.
 **Important:** When list items use a leading icon or symbol, the parent `<ul>` MUST set `list-style:none;padding:0;` to suppress browser default bullets.
 
 ```html
-<ul class="icon-list anim stagger" style="list-style:none;padding:0;">
+<ul class="icon-list anim stagger" style="list-style:none;padding:0;text-align:left;">
   <li style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
     <span class="material-icons-round" style="color:var(--accent);">check_circle</span>
     <span>Item label</span>
@@ -186,6 +191,28 @@ Use for: system architecture, data pipelines, integration maps.
 
 Build from basic SVG shapes (`rect`, `circle`, `path`, `text`). Keep it readable at 900px wide.
 
+**Connector lines and arrowheads MUST use `var(--accent)` or a contrasting bright color** — never `stroke="#2a2a2a"`, `stroke="var(--border)"`, or any near-black/dark-gray value. On a dark slide background these are invisible. Use `stroke="var(--accent)"` or a specific bright hex (e.g. `#29B5E8`, `#10B981`) for every `<line>`, `<path>`, and SVG marker stroke.
+
+**SVG container max-height must be ≥ 58vh.** Wrap the SVG in a `<div>` with `style="max-height:65vh;width:100%;"` — values below 58vh create blank bands on the slide and will trigger a validator warning.
+
+**MUST run `svg_calc.py` before writing any SVG coordinates — never hand-write estimates:**
+
+```
+# 1. Size every rect to fit its longest label (prevents silent text overflow)
+python scripts/run_script.py svg_calc.py textbox --text "Your longest label here" --font-size 11
+# → outputs min_rect_w; your <rect width> must be ≥ that value
+
+# 2. Get a tight viewBox height (prevents blank bands at top/bottom)
+python scripts/run_script.py svg_calc.py viewbox --content-height <H> --rows <N>
+# → outputs exact viewBox height and recommended start-y
+
+# 3. For stacked boxes in a column, get exact y positions AND required container height
+python scripts/run_script.py svg_calc.py stack --count <N> --box-height <H> --gap <G> --container-y <container_rect_y>
+# → outputs container_height; set your outer <rect height> to that value — NOT the viewBox height
+```
+
+Run step 1 for **every text label** in the SVG. A label that looks short at small font sizes can still overflow — the s9 incident had a 303px label in a 230px box at font-size 9.5.
+
 ---
 
 ## Progress Ring
@@ -230,6 +257,10 @@ Custom SVG built from basic shapes depicting a concept. Arrows connect nodes.
 Use for: concept maps, relationship diagrams, layered models.
 
 Build entirely with `<svg>` using `rect`, `circle`, `path`, `text`, `line`. No external assets.
+
+**SVG container max-height must be ≥ 58vh** — same rule as Architecture Diagram above.
+
+**MUST run `svg_calc.py` before writing coordinates** — same pre-flight as Architecture Diagram above. At minimum run `textbox` for every label and `viewbox` for the overall height.
 
 ---
 
@@ -285,7 +316,7 @@ Use for: concept + diagram, list + screenshot, text + chart, any "explain and sh
   <div>
     <h2 style="font-size:36px;margin-bottom:16px;">Left Heading</h2>
     <p style="font-size:18px;color:var(--secondary);line-height:1.6;">Supporting text or list goes here.</p>
-    <ul class="icon-list" style="list-style:none;padding:0;margin-top:16px;">
+    <ul class="icon-list" style="list-style:none;padding:0;margin-top:16px;text-align:left;">
       <li style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <span class="material-icons-round" style="color:var(--accent);">check_circle</span>
         <span>Key point</span>

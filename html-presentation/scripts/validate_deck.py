@@ -38,6 +38,15 @@ Checks performed:
 19. **JS wiring** — fails if legacy ``toggleNotes()`` found; warns if
    ``openNotesWindow``, ``openNotesPanel``, ``closeNotesPanel``, or N/B
    key bindings are absent (when speaker notes present)
+20. **SVG text overflow** — warns when estimated text width
+   (``len × font-size × 0.65``) exceeds the containing ``<rect>`` width
+   by more than 20px; run ``svg_calc.py textbox`` to confirm and fix
+21. **SVG viewBox top-gap** — warns when the first content element's ``y``
+   position exceeds 12% of the viewBox height, creating a blank band at
+   the top of the diagram
+22. **SVG rect overflow** — warns when a ``<rect>`` element's bottom or
+   right edge extends beyond its containing ``<rect>`` (inner box escaping
+   its panel container); run ``svg_calc.py stack --container-y`` to fix
 
 Usage::
 
@@ -59,6 +68,9 @@ MAX_FILE_SIZE = 20 * 1024 * 1024
 MAX_WORDS_PER_SLIDE = 30
 MAX_QR_PER_SLIDE = 6
 MIN_SVG_VH = 58
+SVG_CHAR_WIDTH = 0.65
+SVG_OVERFLOW_TOLERANCE = 20.0
+SVG_GAP_THRESHOLD = 0.12
 
 VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r'class="[^"]*card-grid',
@@ -153,6 +165,14 @@ SVG_CONTAINER_RE = re.compile(
     r'(?:max-height\s*:\s*)([\d.]+)(vh|px)',
     re.IGNORECASE,
 )
+SVG_BLOCK_RE = re.compile(r'<svg\b([^>]*)>(.*?)</svg>', re.DOTALL | re.IGNORECASE)
+SVG_VIEWBOX_ATTR_RE = re.compile(r'\bviewBox\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
+SVG_RECT_ELEM_RE = re.compile(r'<rect\b([^>]*?)/?>', re.IGNORECASE)
+SVG_TEXT_ELEM_RE = re.compile(r'<text\b([^>]*?)>(.*?)</text>', re.DOTALL | re.IGNORECASE)
+SVG_CONTENT_Y_RE = re.compile(
+    r'<(?:rect|circle|text|line|ellipse)\b[^>]*?\by\s*=\s*["\']?\s*([0-9.]+)',
+    re.IGNORECASE,
+)
 EXTERNAL_LINK_RE = re.compile(r'<a\s[^>]*href="https?://[^"]*"', re.IGNORECASE)
 APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
 APPENDIX_BLOCK_RE = re.compile(
@@ -235,6 +255,23 @@ def count_visible_words(html_block: str) -> int:
 
 def has_visual(html_block: str) -> bool:
     return any(pat.search(html_block) for pat in VISUAL_PATTERNS)
+
+
+def _svg_float(attrs: str, name: str, default: float = 0.0) -> float:
+    escaped = re.escape(name)
+    m = re.search(r'\b' + escaped + r'\s*=\s*["\']?\s*([-0-9.]+)', attrs, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+    m = re.search(escaped + r'\s*:\s*([-0-9.]+)', attrs, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+    return default
+
+
+def _svg_text_longest_line(inner: str) -> str:
+    chunks = re.split(r'<[^>]+>', inner)
+    chunks = [c.strip() for c in chunks if c.strip()]
+    return max(chunks, key=len) if chunks else ''
 
 
 def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
@@ -580,6 +617,143 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
                 passes.append(
                     "JS wiring: openNotesWindow/openNotesPanel/closeNotesPanel and N/B bindings all present"
                 )
+
+    # 20. SVG text overflow — estimate text width vs containing rect width
+    # 21. SVG viewBox top-gap — first content element far below viewBox top
+    svg_overflows: list[str] = []
+    svg_topgaps: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_attrs = svg_m.group(1)
+            svg_body  = svg_m.group(2)
+            svg_pos   = sb.start() + len(sb.group(1)) + svg_m.start()
+
+            rects = []
+            for r in SVG_RECT_ELEM_RE.finditer(svg_body):
+                a  = r.group(1)
+                rx = _svg_float(a, 'x')
+                ry = _svg_float(a, 'y')
+                rw = _svg_float(a, 'width')
+                rh = _svg_float(a, 'height')
+                if rw > 0 and rh > 0:
+                    rects.append((rx, ry, rw, rh))
+
+            for t in SVG_TEXT_ELEM_RE.finditer(svg_body):
+                t_attrs = t.group(1)
+                t_inner = t.group(2)
+                tx      = _svg_float(t_attrs, 'x')
+                ty      = _svg_float(t_attrs, 'y')
+                fs      = _svg_float(t_attrs, 'font-size', 12.0)
+                text    = _svg_text_longest_line(t_inner)
+                if not text or fs <= 0:
+                    continue
+                est_w = len(text) * fs * SVG_CHAR_WIDTH
+                containing = [
+                    (cw * ch, cx, cy, cw, ch)
+                    for (cx, cy, cw, ch) in rects
+                    if cx - 5 <= tx <= cx + cw + 5 and cy - 5 <= ty <= cy + ch + 5
+                ]
+                if not containing:
+                    continue
+                _, cx, cy, cw, ch = min(containing, key=lambda c: c[0])
+                if est_w > cw + SVG_OVERFLOW_TOLERANCE:
+                    ln = line_no(html, svg_pos + t.start())
+                    svg_overflows.append(
+                        f"{sid} line {ln}: \"{text[:40]}\" ~{est_w:.0f}px in {cw:.0f}px rect"
+                    )
+
+            vb_m = SVG_VIEWBOX_ATTR_RE.search(svg_attrs)
+            if vb_m:
+                parts = vb_m.group(1).split()
+                if len(parts) == 4:
+                    try:
+                        vb_y = float(parts[1])
+                        vb_h = float(parts[3])
+                        ys   = [float(m.group(1)) for m in SVG_CONTENT_Y_RE.finditer(svg_body)]
+                        if ys and vb_h > 0:
+                            min_y = min(ys)
+                            gap   = (min_y - vb_y) / vb_h
+                            if gap > SVG_GAP_THRESHOLD:
+                                ln = line_no(html, svg_pos)
+                                svg_topgaps.append(
+                                    f"{sid} line {ln}: first y={min_y:.0f} in viewBox "
+                                    f"height={vb_h:.0f} ({gap*100:.0f}% top gap)"
+                                )
+                    except (ValueError, IndexError):
+                        pass
+
+    if svg_overflows:
+        warns.append(
+            f"{len(svg_overflows)} SVG text element(s) may overflow containing rect — "
+            f"run svg_calc.py textbox to confirm: {svg_overflows[0]}"
+            + (f"  (+{len(svg_overflows) - 1} more)" if len(svg_overflows) > 1 else "")
+        )
+    else:
+        passes.append("No SVG text overflow detected (estimated widths within rect bounds)")
+
+    if svg_topgaps:
+        warns.append(
+            f"{len(svg_topgaps)} SVG viewBox(es) with top gap > {SVG_GAP_THRESHOLD*100:.0f}%: "
+            f"{svg_topgaps[0]}"
+            + (f"  (+{len(svg_topgaps) - 1} more)" if len(svg_topgaps) > 1 else "")
+        )
+    else:
+        passes.append(f"SVG viewBox top gaps within {SVG_GAP_THRESHOLD*100:.0f}% threshold")
+
+    # 22. SVG rect overflow — inner <rect> escaping its containing <rect>
+    SVG_RECT_OVERFLOW_TOLERANCE = 5.0
+    rect_overflows: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_body = svg_m.group(2)
+            svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+
+            rects = []
+            for r in SVG_RECT_ELEM_RE.finditer(svg_body):
+                a  = r.group(1)
+                rx = _svg_float(a, 'x')
+                ry = _svg_float(a, 'y')
+                rw = _svg_float(a, 'width')
+                rh = _svg_float(a, 'height')
+                if rw > 0 and rh > 0:
+                    rects.append((rx, ry, rw, rh, r.start()))
+
+            for (rx, ry, rw, rh, r_pos) in rects:
+                containers = [
+                    (cw * ch, cx, cy, cw, ch)
+                    for (cx, cy, cw, ch, _) in rects
+                    if cx - 5 <= rx and cy - 5 <= ry
+                    and rx <= cx + cw + 5 and ry <= cy + ch + 5
+                    and (cw > rw or ch > rh)
+                    and not (cx == rx and cy == ry and cw == rw and ch == rh)
+                ]
+                if not containers:
+                    continue
+                _, cx, cy, cw, ch = min(containers, key=lambda c: c[0])
+                bottom_over = (ry + rh) - (cy + ch)
+                right_over  = (rx + rw) - (cx + cw)
+                if bottom_over > SVG_RECT_OVERFLOW_TOLERANCE or right_over > SVG_RECT_OVERFLOW_TOLERANCE:
+                    ln = line_no(html, svg_pos + r_pos)
+                    parts = []
+                    if bottom_over > SVG_RECT_OVERFLOW_TOLERANCE:
+                        parts.append(f"bottom overflow +{bottom_over:.0f}px")
+                    if right_over > SVG_RECT_OVERFLOW_TOLERANCE:
+                        parts.append(f"right overflow +{right_over:.0f}px")
+                    rect_overflows.append(
+                        f"{sid} line {ln}: inner rect y={ry:.0f}+{rh:.0f} in container "
+                        f"y={cy:.0f}+{ch:.0f} — {', '.join(parts)}"
+                    )
+
+    if rect_overflows:
+        warns.append(
+            f"{len(rect_overflows)} SVG inner rect(s) overflow their container — "
+            f"run svg_calc.py stack --container-y to fix: {rect_overflows[0]}"
+            + (f"  (+{len(rect_overflows) - 1} more)" if len(rect_overflows) > 1 else "")
+        )
+    else:
+        passes.append("No SVG rect containment overflow detected")
 
     return passes, warns, fails
 

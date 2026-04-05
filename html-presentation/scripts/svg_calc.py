@@ -57,13 +57,15 @@ def cmd_stack(args):
       --labels L       Comma-separated labels — validates each fits in W (optional)
     """
     p = argparse.ArgumentParser(prog="svg_calc.py stack")
-    p.add_argument("--count",      "-n", type=int,   required=True)
-    p.add_argument("--box-height", "-H", type=int,   required=True)
-    p.add_argument("--gap",        "-g", type=int,   default=12)
-    p.add_argument("--start-y",    "-y", type=int,   default=20)
-    p.add_argument("--box-width",  "-W", type=int,   default=None)
-    p.add_argument("--font-size",  "-f", type=int,   default=12)
-    p.add_argument("--labels",     "-l", type=str,   default=None)
+    p.add_argument("--count",        "-n", type=int,   required=True)
+    p.add_argument("--box-height",   "-H", type=int,   required=True)
+    p.add_argument("--gap",          "-g", type=int,   default=12)
+    p.add_argument("--start-y",      "-y", type=int,   default=20)
+    p.add_argument("--box-width",    "-W", type=int,   default=None)
+    p.add_argument("--font-size",    "-f", type=int,   default=12)
+    p.add_argument("--labels",       "-l", type=str,   default=None)
+    p.add_argument("--container-y",  "-c", type=int,   default=None,
+                   help="y of the outer container rect — outputs required container height")
     a = p.parse_args(args)
 
     labels = [s.strip() for s in a.labels.split(",")] if a.labels else []
@@ -98,6 +100,12 @@ def cmd_stack(args):
     viewbox_h = last_bottom + 20
 
     print(f"\nviewBox height required : {viewbox_h}  (last bottom {last_bottom} + 20px margin)")
+
+    if a.container_y is not None:
+        container_h = last_bottom + 8 - a.container_y
+        print(f"container rect height   : {container_h}  "
+              f"(last bottom {last_bottom} + 8px padding - container_y {a.container_y})"
+              f"\n  ➜  <rect y=\"{a.container_y}\" height=\"{container_h}\" ...>")
 
     if warnings:
         print(f"\n{'─'*55}")
