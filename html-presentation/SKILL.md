@@ -5,26 +5,11 @@ description: "Generate beautiful self-contained HTML presentations with rich vis
 
 # HTML Presentation
 
-## ⚠️ Shell Safety Rules — Read Before Issuing Any Bash Command
+## ⚠️ Shell Safety Rules
 
-These rules apply **everywhere** in this skill. Violating them causes the shell to hang and blocks the user.
+**NEVER use heredoc syntax** (`<<EOF` or `<<'EOF'`) — the shell gets stuck waiting for the terminator and hangs. This is the only bash restriction.
 
-**NEVER do any of these:**
-- `<<EOF` or `<<'EOF'` heredoc syntax — the shell gets stuck waiting for the terminator
-- `python3 -c "..."` or `python -c "..."` with multi-line strings — use a script file instead
-- Multi-line `while read` loops in bash
-- `bash -c "..."` with embedded newlines
-- Any bash command that spans multiple lines inside a single string
-
-**ALWAYS do these instead:**
-
-| Instead of... | Do this |
-|---|---|
-| `python3 -c "import re\n..."` | Use the `write` tool to save a `.py` file, then `python3 /tmp/script.py` |
-| Inline logic over multiple lines | `python scripts/run_script.py <script.py> [args]` |
-| Multi-step bash chains | Separate sequential bash tool calls |
-
-Every bash command in this skill must be **a single line**. If it cannot be expressed that way, write a Python script first, then call it.
+For multi-line content (commit messages, Python scripts, config files), use the `write` tool to save to a file first, then reference it by path.
 
 ---
 
