@@ -5,6 +5,29 @@ description: "Generate beautiful self-contained HTML presentations with rich vis
 
 # HTML Presentation
 
+## ⚠️ Shell Safety Rules — Read Before Issuing Any Bash Command
+
+These rules apply **everywhere** in this skill. Violating them causes the shell to hang and blocks the user.
+
+**NEVER do any of these:**
+- `<<EOF` or `<<'EOF'` heredoc syntax — the shell gets stuck waiting for the terminator
+- `python3 -c "..."` or `python -c "..."` with multi-line strings — use a script file instead
+- Multi-line `while read` loops in bash
+- `bash -c "..."` with embedded newlines
+- Any bash command that spans multiple lines inside a single string
+
+**ALWAYS do these instead:**
+
+| Instead of... | Do this |
+|---|---|
+| `python3 -c "import re\n..."` | Use the `write` tool to save a `.py` file, then `python3 /tmp/script.py` |
+| Inline logic over multiple lines | `python scripts/run_script.py <script.py> [args]` |
+| Multi-step bash chains | Separate sequential bash tool calls |
+
+Every bash command in this skill must be **a single line**. If it cannot be expressed that way, write a Python script first, then call it.
+
+---
+
 ## Workflow
 
 ### Step 0: Resume Check
@@ -26,14 +49,6 @@ If no checkpoint files exist, proceed normally from Step 1.
 
 ---
 
-### Bash rules (apply everywhere in this skill)
-
-- **Never use bash heredoc syntax (`<<EOF`, `<<'EOF'`).** It is fragile in agentic contexts. Use Python, the `write` tool, or single-quoted strings instead.
-- **Never use multi-line bash `while read` loops.** Use Python one-liners or scripts for any multi-line logic.
-- When a bash command needs to span multiple logical steps, break it into separate sequential tool calls rather than chaining with heredoc or loops.
-
----
-
 ### Step 1: Gather Content
 
 Ask the user for:
@@ -50,8 +65,9 @@ Ask the user for:
 - **Executive audience** -- is this presentation for an executive audience (VP, C-suite, board, or key decision-makers)? If yes, set `exec_mode: true` — this activates BLUF structure: the recommendation comes first, the Agenda slide is skipped, slide titles become declarative assertions, and the deck is capped at 7 content slides. See Step 2 and Content Rules for full details.
 
 **Handling the title slide logo:**
-- **Snowflake logo**: Read `assets/snowflake-logo.svg` and note the file path — you will inline it during Step 3. Do NOT attempt to inline it now.
-- **Custom logo**: Treat it the same as any user-provided image — use a `{{IMG:path}}` placeholder and resolve it in the embed phase.
+- **Snowflake logo**: Note that you will place a `{{SNOWFLAKE_LOGO}}` placeholder in the HTML during Step 3 — the embed phase handles the rest. Do NOT attempt to write any SVG now.
+- **Custom logo (SVG)**: Use a `{{SVG_INLINE:path}}` placeholder (standalone token, not inside `<img>`). If sizing is needed, pass CSS as the second arg: `{{SVG_INLINE:path|height:60px;display:block;margin:0 auto}}`. See `references/graphics-embedding.md`.
+- **Custom logo (raster)**: Use a `{{IMG:path}}` placeholder inside an `<img src="...">` tag.
 - **No logo**: Omit any logo element from the title slide entirely.
 
 **Handling images — ask_user_question limitation:** The structured question tool (ask_user_question) only supports text input and multiple-choice options — users **cannot** paste images through it. When asking about headshots or custom graphics:
@@ -60,8 +76,9 @@ Ask the user for:
 
 **Handling pasted images:** When a user pastes an image directly into the chat (instead of providing a file path), save it to the presentation folder so the build scripts can process it:
 1. Write the pasted image data to: `[folder]/pasted_<purpose>_<timestamp>.png` (e.g., `acme/cortex-ai/pasted_headshot_1711700000.png`)
-2. Use that path wherever a file path would normally go — in `{{IMG:...}}` placeholders, `insert_presenter.py --photo`, etc.
-3. Inform the user: "Got it — I've saved your pasted image to the presentation folder."
+2. For **raster images**: use `{{IMG:path}}` in `<img src="...">` tags; for **SVG files**: use `{{SVG_INLINE:path}}` as a standalone token.
+3. For presenter headshots, use that path with `insert_presenter.py --photo`.
+4. Inform the user: "Got it — I've saved your pasted image to the presentation folder."
 
 **Handling user-provided image file paths:** When the user provides a path to an image file, copy it into the presentation folder before use:
 1. Copy the file to `[folder]/` (preserving the original filename)
@@ -145,16 +162,7 @@ Use the returned brief as the factual foundation for slide copy in Step 2.
 
 **URL validation (mandatory after saving brief):** Extract every URL from the brief and verify it resolves. Run:
 ```bash
-python3 -c "
-import re, urllib.request, sys
-urls = sorted(set(re.findall(r'https?://[^\s)>\"]+', open('[folder]/[topic-slug]-brief.md').read())))
-for u in urls:
-    try:
-        code = urllib.request.urlopen(u, timeout=10).status
-    except Exception as e:
-        code = str(e)
-    print(code, u)
-"
+python scripts/run_script.py validate_urls.py [folder]/[topic-slug]-brief.md
 ```
 For any URL that returns a non-200 status or times out:
 1. Mark it `[DEAD LINK]` inline in the brief file
@@ -210,7 +218,7 @@ Generate a single self-contained HTML file following the Slide Structure, HTML O
 - `references/accent-colors.md`
 - `references/graphics-embedding.md`
 
-**Inlining the Snowflake logo (if selected in Step 1):** Read `assets/snowflake-logo.svg` and inline the `<svg>` markup directly as the **first child inside `.slide-inner`** on the title slide (before the `<h3>` eyebrow). Style it with `display: block; margin: 0 auto clamp(10px, 2vh, 18px); height: clamp(44px, 7vh, 80px); width: auto;`. Do NOT use `position: absolute`. Do NOT base64-encode SVG. **⚠️ CRITICAL: The SVG contains 16 `<path>` elements — 7 for the snowflake mark (x ≈ 0–43) and 9 for the "Snowflake" wordmark text (x ≈ 60–184). Copy ALL 16 paths. Copying only the mark paths omits the "Snowflake" wordmark. Verify the inlined SVG has exactly 16 `<path>` elements before moving on.**
+**Inlining the Snowflake logo (if selected in Step 1):** Place a bare `{{SNOWFLAKE_LOGO}}` token on its own line as the **first child inside `.slide-inner`** on the title slide (before the `<h3>` eyebrow). The `embed_image.py` embed phase will replace it with the correct inline `<svg>` block automatically — do NOT read any SVG file, do NOT write any `<svg>` or `<path>` markup manually.
 
 **Iterative Batch-Build (required for 13+ slides):**
 
@@ -249,26 +257,19 @@ When in doubt, use 5. Smaller batches add one extra `edit` call but prevent losi
 
 **Mark each batch complete in the todo list** before starting the next (`system_todo_write` with status `completed`), so progress is preserved if the session is interrupted. Resume from the last completed batch using the `<!-- SLIDES_REMAINING_N -->` placeholder as the insertion point.
 
-**Two-phase build (when the deck includes user-provided images):**
-1. **Author phase** — Write the HTML with `{{IMG:path/to/file.png}}` placeholder tokens in every `<img src="...">` that needs a user-provided image. The resulting HTML is small and fully readable. Do NOT run `img_to_base64.py` or paste any base64 strings during this phase.
-2. **Embed phase** — Inform the user: "Embedding images — this may take a moment." Then run `python scripts/run_script.py embed_image.py <deck.html>` to resolve all placeholders into base64 data URIs. This happens entirely in Python — no base64 data ever enters the conversation context.
+**Two-phase build (when the deck includes user-provided images, SVGs, or the Snowflake logo):**
+1. **Author phase** — Write the HTML with placeholder tokens. Do NOT write any `<svg>`/`<path>` markup or base64 strings during this phase.
+   - `{{SNOWFLAKE_LOGO}}` — standalone token for the Snowflake logo on the title slide
+   - `{{SVG_INLINE:path}}` or `{{SVG_INLINE:path|css-style}}` — standalone token for any user-provided `.svg` file
+   - `{{IMG:path}}` or `{{IMG:path|max-px}}` — inside `<img src="...">` for raster images (PNG/JPG/etc.)
+2. **Embed phase** — Inform the user: "Embedding images — this may take a moment." Then run `python scripts/run_script.py embed_image.py <deck.html>` to resolve all tokens. This happens entirely in Python — no SVG markup or base64 data ever enters the conversation context.
 3. **QR appendix phase** — If the deck contains any `<a>` links to external URLs, inform the user: "Generating QR code appendix." Then run `python scripts/run_script.py generate_qr_appendix.py <deck.html>` to scan for links and append a QR code appendix slide with inline SVG QR codes. The script auto-numbers the new slide and updates the total counter. **The script requires a `<div class="counter"></div>` marker in the HTML** to know where to insert the new slide — this MUST be included in the initial HTML build (see HTML Output > Navigation).
 
-If the deck has no user-provided images (only Material Icons, inline SVGs, and CSS graphics), skip the embed phase — the HTML is already self-contained.
+If the deck has no user-provided images, no SVGs, and no Snowflake logo (only Material Icons, inline CSS graphics), skip the embed phase — the HTML is already self-contained.
 
 **4. URL validation phase** — After the QR appendix is generated, verify that every external link in the deck resolves successfully. Run:
 ```bash
-python3 -c "
-import re, urllib.request
-urls = sorted(set(re.findall(r'href=\"(https?://[^\"]+)', open('<deck.html>').read())))
-urls = [u for u in urls if 'googleapis.com' not in u]
-for u in urls:
-    try:
-        code = urllib.request.urlopen(u, timeout=10).status
-    except Exception as e:
-        code = str(e)
-    print(code, u)
-"
+python scripts/run_script.py validate_urls.py [folder]/[topic-slug]-[audience-slug]-slides.html
 ```
 Any URL returning a non-200 status MUST be replaced with a live equivalent before proceeding. After fixing any broken URLs, re-run `generate_qr_appendix.py` — it is idempotent and will rebuild QR codes to encode the corrected links. Do not proceed to Step 4 with unresolved broken links.
 

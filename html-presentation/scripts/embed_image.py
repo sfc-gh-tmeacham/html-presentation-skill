@@ -1,28 +1,43 @@
 #!/usr/bin/env python3
-"""Replace ``{{IMG:...}}`` placeholder tokens in an HTML file with base64 data URIs.
+"""Replace placeholder tokens in an HTML slide deck with embedded assets.
 
-This script enables a two-phase build workflow for slide decks:
+This script enables a two-phase build workflow:
 
-  1. **Author phase** — the LLM writes HTML with short placeholder tokens where
-     images should appear.  No base64 ever enters the conversation context.
-  2. **Embed phase** — this script scans the HTML, resolves each placeholder to
-     a local file, resizes raster images, base64-encodes them, and writes the
-     result back to the HTML file.  All heavy binary data stays in Python.
+  1. **Author phase** — the LLM writes HTML with short placeholder tokens.
+     No base64 or SVG markup ever enters the conversation context.
+  2. **Embed phase** — this script resolves each token, embeds the asset,
+     and writes the result back.  All heavy data stays in Python.
 
-Placeholder syntax::
+Supported tokens
+----------------
 
-    {{IMG:path/to/image.png}}          — uses the default max-size (800 px)
-    {{IMG:path/to/image.png|300}}      — caps the longest side at 300 px
-    {{IMG:~/Downloads/logo.svg}}       — tilde expansion is supported
-    {{IMG:./assets/hero.jpg|1200}}     — relative paths resolved from HTML dir
+``{{IMG:path}}`` / ``{{IMG:path|max-px}}``
+    Resize (if needed) and base64-encode a raster image or SVG.  Replaces
+    only the ``src`` attribute value — keep it inside ``<img src="...">``::
 
-Placeholders are designed to appear inside ``src="..."`` attributes::
+        <img src="{{IMG:photo.png}}" alt="Team photo">
+        <img src="{{IMG:logo.svg|200}}" alt="Logo">
 
-    <img src="{{IMG:photo.png}}" alt="Team photo">
-    <img src="{{IMG:logo.svg|200}}" alt="Logo">
+``{{SNOWFLAKE_LOGO}}``
+    Inject the Snowflake mark + wordmark as a pre-validated inline SVG block.
+    Place as a bare standalone token (not inside an ``<img>``).
 
-After running this script, the placeholder is replaced in-place with the full
-``data:<mime>;base64,...`` URI.  The HTML file is overwritten.
+``{{SVG_INLINE:path}}`` / ``{{SVG_INLINE:path|css-style}}``
+    Inline a user-provided SVG file directly as an ``<svg>`` element.
+    Safer and more flexible than ``{{IMG:...}}`` for SVGs because:
+    - No base64 overhead (SVGs are text)
+    - Can inherit CSS custom properties such as ``var(--accent)``
+    - Directly styleable with CSS
+    The optional second argument is a CSS style string injected onto the
+    root ``<svg>`` element::
+
+        {{SVG_INLINE:customer-logo.svg}}
+        {{SVG_INLINE:customer-logo.svg|height:60px;display:block;margin:0 auto}}
+
+    User-provided SVGs are sanitized: ``<script>`` elements, ``on*`` event
+    handlers, ``javascript:`` URIs, and XML declarations are stripped.
+    Use ``{{IMG:path.svg}}`` instead when you need the SVG inside an
+    ``<img>`` tag or when the SVG should not be part of the DOM.
 
 Requires Pillow (installed automatically when invoked via run_script.py).
 
@@ -76,6 +91,175 @@ _FMT_MIME: dict[str, str] = {
 RASTER_EXTENSIONS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 
 PLACEHOLDER_RE = re.compile(r"\{\{IMG:(.+?)\}\}")
+LOGO_PLACEHOLDER_RE = re.compile(r"\{\{SNOWFLAKE_LOGO\}\}")
+SVG_INLINE_RE = re.compile(r"\{\{SVG_INLINE:(.+?)\}\}")
+
+_SVG_SCRIPT_RE = re.compile(r"<script[\s\S]*?</script>", re.IGNORECASE)
+_SVG_EVENT_RE = re.compile(r"\s+on\w+\s*=\s*(?:(?P<q>['\"]).*?(?P=q)|\S+)", re.IGNORECASE)
+_SVG_JS_URI_RE = re.compile(r"javascript\s*:[^\"'\s>]*", re.IGNORECASE)
+_SVG_XML_DECL_RE = re.compile(r"<\?xml[^?]*\?>", re.IGNORECASE)
+_SVG_DOCTYPE_RE = re.compile(r"<!DOCTYPE[^>]*>", re.IGNORECASE)
+_SVG_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_SVG_STYLE_ATTR_RE = re.compile(r"(<svg\b[^>]*?)\sstyle=(?P<q>['\"]).*?(?P=q)", re.IGNORECASE)
+_SVG_TAG_RE = re.compile(r"(<svg\b)", re.IGNORECASE)
+
+LOGO_SVG_STYLE = (
+    'style="display:block;margin:0 auto clamp(10px,2vh,18px);'
+    'height:clamp(44px,7vh,80px);width:auto;"'
+)
+LOGO_SVG_HEADER = (
+    '<svg viewBox="0 0 184 44" xmlns="http://www.w3.org/2000/svg" '
+    'aria-label="Snowflake" role="img" ' + LOGO_SVG_STYLE + ">\n"
+    '  <g fill="#29B5E8" fill-rule="nonzero" transform="translate(-0.002027,0.531250)">\n'
+)
+LOGO_SVG_FOOTER = "  </g>\n</svg>"
+
+_LOGO_INLINE: str | None = None
+
+
+def _get_logo_inline() -> str:
+    """Read assets/snowflake-logo.svg and return a ready-to-inline SVG block.
+
+    The SVG file is located at ``../assets/snowflake-logo.svg`` relative to
+    this script.  The XML declaration, Sketch metadata, and ``id`` attributes
+    are stripped; the prescribed CSS sizing and accessibility attributes are
+    applied.
+
+    The result is cached in-process after the first read.
+    """
+    global _LOGO_INLINE
+    if _LOGO_INLINE is not None:
+        return _LOGO_INLINE
+
+    script_dir = Path(__file__).resolve().parent
+    logo_path = script_dir.parent / "assets" / "snowflake-logo.svg"
+    if not logo_path.is_file():
+        raise FileNotFoundError(f"Snowflake logo not found at expected path: {logo_path}")
+
+    raw = logo_path.read_text(encoding="utf-8")
+    paths = re.findall(r'<path d="([^"]+)"', raw)
+    if len(paths) != 16:
+        raise ValueError(
+            f"Expected 16 <path> elements in snowflake-logo.svg, found {len(paths)}. "
+            "The logo file may be corrupt or have been modified."
+        )
+
+    path_lines = "\n".join(f'    <path d="{d}"/>' for d in paths)
+    _LOGO_INLINE = LOGO_SVG_HEADER + path_lines + "\n" + LOGO_SVG_FOOTER
+    return _LOGO_INLINE
+
+def _sanitize_svg(text: str) -> str:
+    """Strip dangerous constructs from a user-provided SVG string.
+
+    Removes: XML/DOCTYPE declarations, HTML comments, ``<script>`` elements,
+    ``on*`` event-handler attributes, and ``javascript:`` URI values.
+    The resulting string is safe to inject directly into HTML.
+    """
+    text = _SVG_XML_DECL_RE.sub("", text)
+    text = _SVG_DOCTYPE_RE.sub("", text)
+    text = _SVG_COMMENT_RE.sub("", text)
+    text = _SVG_SCRIPT_RE.sub("", text)
+    text = _SVG_EVENT_RE.sub("", text)
+    text = _SVG_JS_URI_RE.sub("", text)
+    return text.strip()
+
+
+def _inject_svg_style(svg_text: str, style: str) -> str:
+    """Merge *style* into the root ``<svg>`` element's style attribute.
+
+    If a ``style`` attribute already exists on the root ``<svg>`` tag it is
+    replaced; otherwise a new one is added.  Only the first ``<svg>`` tag is
+    touched.
+    """
+    replacement = rf'\1 style="{style}"'
+    result, n = _SVG_STYLE_ATTR_RE.subn(replacement, svg_text, count=1)
+    if n == 0:
+        result = _SVG_TAG_RE.sub(rf'\1 style="{style}"', svg_text, count=1)
+    return result
+
+
+def _inline_user_svg(file_path: Path, style: str | None) -> str:
+    """Read, sanitize, and optionally restyle a user-provided SVG file.
+
+    Returns the SVG markup ready for direct inline embedding in HTML.
+    """
+    raw = file_path.read_text(encoding="utf-8")
+    sanitized = _sanitize_svg(raw)
+    if style:
+        sanitized = _inject_svg_style(sanitized, style)
+    return sanitized
+
+
+def _parse_svg_inline_token(token_body: str) -> tuple[str, str | None]:
+    """Parse ``{{SVG_INLINE:path}}`` or ``{{SVG_INLINE:path|css-style}}``.
+
+    Returns:
+        A tuple of (file_path_str, css_style_or_None).
+    """
+    if "|" in token_body:
+        path_str, _, style_str = token_body.partition("|")
+        return path_str.strip(), style_str.strip() or None
+    return token_body.strip(), None
+
+
+def process_svg_inline(
+    html: str, base_dir: Path, dry_run: bool = False
+) -> tuple[str, int, list[str]]:
+    """Replace all ``{{SVG_INLINE:...}}`` tokens with sanitized inline SVG.
+
+    Returns:
+        A tuple of (modified_html, count_replaced, errors).
+    """
+    errors: list[str] = []
+    count = 0
+
+    if dry_run:
+        for match in SVG_INLINE_RE.finditer(html):
+            path_str, style = _parse_svg_inline_token(match.group(1))
+            file_path, resolve_err = resolve_path(path_str, base_dir)
+            if resolve_err:
+                errors.append(resolve_err)
+            elif not file_path.exists():
+                errors.append(f"NOT FOUND: {path_str} (resolved: {file_path})")
+            elif file_path.suffix.lower() != ".svg":
+                errors.append(f"NOT SVG: {path_str} — {{{{SVG_INLINE}}}} only supports .svg files")
+            else:
+                print(f"  WOULD INLINE SVG: {path_str}" + (f" (style: {style})" if style else ""))
+                count += 1
+        return html, count, errors
+
+    def _replace(match: re.Match) -> str:
+        nonlocal count
+        path_str, style = _parse_svg_inline_token(match.group(1))
+        file_path, resolve_err = resolve_path(path_str, base_dir)
+
+        if resolve_err:
+            errors.append(resolve_err)
+            return match.group(0)
+        if not file_path.exists():
+            errors.append(f"NOT FOUND: {path_str} (resolved: {file_path})")
+            return match.group(0)
+        if file_path.suffix.lower() != ".svg":
+            errors.append(f"NOT SVG: {path_str} — {{{{SVG_INLINE}}}} only supports .svg files")
+            return match.group(0)
+        st = file_path.stat()
+        if st.st_size > MAX_FILE_SIZE_BYTES:
+            mb = st.st_size / (1024 * 1024)
+            errors.append(f"TOO LARGE: {path_str} ({mb:.1f} MB)")
+            return match.group(0)
+
+        try:
+            inline = _inline_user_svg(file_path, style)
+        except Exception as exc:
+            errors.append(f"SVG_INLINE ERROR: {path_str} — {exc}")
+            return match.group(0)
+
+        count += 1
+        return inline
+
+    result = SVG_INLINE_RE.sub(_replace, html)
+    return result, count, errors
+
 
 _TMP_DIRS: frozenset[Path] = frozenset({
     Path("/tmp").resolve(),
@@ -201,6 +385,31 @@ def parse_token(token_body: str) -> tuple[str, int | None]:
     return token_body.strip(), None
 
 
+def process_logo(html: str, dry_run: bool = False) -> tuple[str, int, list[str]]:
+    """Replace all ``{{SNOWFLAKE_LOGO}}`` tokens with an inline SVG block.
+
+    Returns:
+        A tuple of (modified_html, count_replaced, errors).
+    """
+    count = len(LOGO_PLACEHOLDER_RE.findall(html))
+    if count == 0:
+        return html, 0, []
+
+    if dry_run:
+        print(f"  WOULD EMBED: {{{{SNOWFLAKE_LOGO}}}} ({count} occurrence(s))")
+        return html, count, []
+
+    errors: list[str] = []
+    try:
+        inline_svg = _get_logo_inline()
+    except (FileNotFoundError, ValueError) as exc:
+        errors.append(f"SNOWFLAKE_LOGO ERROR: {exc}")
+        return html, 0, errors
+
+    result = LOGO_PLACEHOLDER_RE.sub(inline_svg, html)
+    return result, count, errors
+
+
 def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool = False) -> tuple[str, int, int, list[str]]:
     """Find and replace all ``{{IMG:...}}`` placeholders in the HTML.
 
@@ -216,9 +425,12 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
     Returns:
         A tuple of (modified_html, count_replaced, total_bytes_added, errors).
     """
+    html, logo_count, logo_errors = process_logo(html, dry_run=dry_run)
+    html, svg_inline_count, svg_inline_errors = process_svg_inline(html, base_dir, dry_run=dry_run)
+
     count = 0
     total_bytes = 0
-    errors: list[str] = []
+    errors: list[str] = list(logo_errors) + list(svg_inline_errors)
 
     if dry_run:
         for match in PLACEHOLDER_RE.finditer(html):
@@ -274,12 +486,12 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
         return data_uri
 
     result = PLACEHOLDER_RE.sub(_replace, html)
-    return result, count, total_bytes, errors
+    return result, count + logo_count + svg_inline_count, total_bytes, errors
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Replace {{IMG:...}} placeholders with base64 data URIs."
+        description="Replace {{IMG:...}} and {{SNOWFLAKE_LOGO}} placeholders in an HTML deck."
     )
     parser.add_argument("html_file", help="Path to the HTML deck file")
     parser.add_argument(
@@ -355,7 +567,7 @@ def main() -> None:
             sys.exit(1)
 
     kb = total_bytes / 1024
-    print(f"Embedded {count} image(s) ({kb:.1f} KB added to HTML).")
+    print(f"Embedded {count} asset(s) ({kb:.1f} KB added to HTML).")
     if errors:
         print(f"  {len(errors)} placeholder(s) had errors — left unchanged.")
 
