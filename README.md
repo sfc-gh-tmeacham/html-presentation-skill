@@ -102,8 +102,10 @@ The `scripts/` directory contains Python utilities that handle image processing,
 | `color_swap_svg.py` | Recolor SVG fills/strokes for dark backgrounds |
 | `embed_image.py` | Replace `{{IMG:...}}` placeholders in HTML with base64 data URIs |
 | `insert_presenter.py` | Inject a presenter slide (resize + base64 + insert + renumber); max 9 presenters |
-| `validate_deck.py` | Lint a finished deck for common issues |
+| `validate_deck.py` | 27-check linter for slide IDs, accessibility, SVG sizing, icons, and more |
 | `generate_qr_appendix.py` | Append a QR code "Resources" slide for all external links |
+| `svg_calc.py` | Coordinate calculator for SVG diagrams (stack, grid, viewbox, markers, audit) |
+| `validate_urls.py` | Verify all external URLs in a deck are reachable |
 
 ## Example Output
 
@@ -144,7 +146,9 @@ html-presentaion-skill/          ← repo root
         ├── embed_image.py
         ├── insert_presenter.py
         ├── validate_deck.py
-        └── generate_qr_appendix.py
+        ├── generate_qr_appendix.py
+        ├── svg_calc.py
+        └── validate_urls.py
 ```
 
 ---
