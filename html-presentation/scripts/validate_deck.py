@@ -38,15 +38,31 @@ Checks performed:
 19. **JS wiring** — fails if legacy ``toggleNotes()`` found; warns if
    ``openNotesWindow``, ``openNotesPanel``, ``closeNotesPanel``, or N/B
    key bindings are absent (when speaker notes present)
-20. **SVG text overflow** — warns when estimated text width
+20. **SVG text overflow** — fails when estimated text width
    (``len × font-size × 0.65``) exceeds the containing ``<rect>`` width
    by more than 20px; run ``svg_calc.py textbox`` to confirm and fix
-21. **SVG viewBox top-gap** — warns when the first content element's ``y``
+21. **SVG viewBox top-gap** — fails when the first content element's ``y``
    position exceeds 12% of the viewBox height, creating a blank band at
    the top of the diagram
-22. **SVG rect overflow** — warns when a ``<rect>`` element's bottom or
+22. **SVG rect overflow** — fails when a ``<rect>`` element's bottom or
    right edge extends beyond its containing ``<rect>`` (inner box escaping
    its panel container); run ``svg_calc.py stack --container-y`` to fix
+23. **SVG marker overflow** — fails when a ``<marker>`` element's effective
+   rendered height (accounting for ``markerUnits`` and ``stroke-width``)
+   exceeds the Euclidean distance between the ``<line>`` endpoints it
+   decorates; run ``svg_calc.py marker --gap <px>`` to compute correct size
+24. **Duplicate marker IDs** — fails when the same ``<marker id="...">`` is
+   defined more than once across all SVGs in the document, causing
+   unpredictable rendering
+25. **SVG viewBox bottom-gap** — fails when the last content element's bottom
+   edge is more than 12% above the viewBox bottom, wasting vertical space;
+   tighten viewBox height to ``max_bottom + 20``
+26. **SVG viewBox aspect ratio** — fails when ``viewBox_width / viewBox_height``
+   exceeds 2.5:1, which causes diagrams to render too small on 16:9 slides;
+   reduce width or increase height
+27. **Blacklisted Material Icons** — fails when a slide contains a
+   ``material-icons-round`` span whose text matches a known-bad icon name
+   (renders incorrectly or ambiguously); replace with a suggested alternative
 
 Usage::
 
@@ -60,6 +76,7 @@ Exit codes:
 
 import argparse
 import re
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -71,6 +88,7 @@ MIN_SVG_VH = 58
 SVG_CHAR_WIDTH = 0.65
 SVG_OVERFLOW_TOLERANCE = 20.0
 SVG_GAP_THRESHOLD = 0.12
+SVG_MAX_ASPECT_RATIO = 2.5
 
 VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r'class="[^"]*card-grid',
@@ -122,6 +140,13 @@ DISPLAY_NONE_SLIDE_RE = re.compile(r"\.slide[^{]*\{[^}]*display\s*:\s*none", re.
 REDUCED_MOTION_RE = re.compile(r"prefers-reduced-motion", re.IGNORECASE)
 MATERIAL_URL_RE = re.compile(r"fonts\.googleapis\.com/icon\?family=Material\+Icons\+Round")
 MATERIAL_CLASS_RE = re.compile(r'class="material-icons-round"')
+MATERIAL_ICON_SPAN_RE = re.compile(
+    r'<span[^>]*class="material-icons-round"[^>]*>\s*([a-z_]+)\s*</span>',
+    re.IGNORECASE,
+)
+ICON_BLOCKLIST: dict[str, str] = {
+    "monitoring": "query_stats, analytics, or trending_up",
+}
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 NOTES_BLOCK_RE = re.compile(r'<div\s+class="speaker-notes"[^>]*>.*?</div>', re.DOTALL | re.IGNORECASE)
 STYLE_TAG_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
@@ -172,6 +197,18 @@ SVG_TEXT_ELEM_RE = re.compile(r'<text\b([^>]*?)>(.*?)</text>', re.DOTALL | re.IG
 SVG_CONTENT_Y_RE = re.compile(
     r'<(?:rect|circle|text|line|ellipse)\b[^>]*?\by\s*=\s*["\']?\s*([0-9.]+)',
     re.IGNORECASE,
+)
+SVG_MARKER_ELEM_RE = re.compile(
+    r'<marker\b([^>]*?)>(.*?)</marker>', re.DOTALL | re.IGNORECASE
+)
+SVG_LINE_ELEM_RE = re.compile(
+    r'<line\b([^>]*?)/?>', re.IGNORECASE
+)
+SVG_MARKER_END_RE = re.compile(
+    r'marker-end\s*=\s*["\']url\(#([^)]+)\)["\']', re.IGNORECASE
+)
+SVG_MARKER_UNITS_RE = re.compile(
+    r'\bmarkerUnits\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE
 )
 EXTERNAL_LINK_RE = re.compile(r'<a\s[^>]*href="https?://[^"]*"', re.IGNORECASE)
 APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
@@ -255,6 +292,17 @@ def count_visible_words(html_block: str) -> int:
 
 def has_visual(html_block: str) -> bool:
     return any(pat.search(html_block) for pat in VISUAL_PATTERNS)
+
+
+def _svg_max_bottom(svg_body: str) -> float:
+    max_b = 0.0
+    for r in SVG_RECT_ELEM_RE.finditer(svg_body):
+        a = r.group(1)
+        ry = _svg_float(a, 'y')
+        rh = _svg_float(a, 'height')
+        if rh > 0:
+            max_b = max(max_b, ry + rh)
+    return max_b
 
 
 def _svg_float(attrs: str, name: str, default: float = 0.0) -> float:
@@ -684,7 +732,7 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
                         pass
 
     if svg_overflows:
-        warns.append(
+        fails.append(
             f"{len(svg_overflows)} SVG text element(s) may overflow containing rect — "
             f"run svg_calc.py textbox to confirm: {svg_overflows[0]}"
             + (f"  (+{len(svg_overflows) - 1} more)" if len(svg_overflows) > 1 else "")
@@ -693,7 +741,7 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         passes.append("No SVG text overflow detected (estimated widths within rect bounds)")
 
     if svg_topgaps:
-        warns.append(
+        fails.append(
             f"{len(svg_topgaps)} SVG viewBox(es) with top gap > {SVG_GAP_THRESHOLD*100:.0f}%: "
             f"{svg_topgaps[0]}"
             + (f"  (+{len(svg_topgaps) - 1} more)" if len(svg_topgaps) > 1 else "")
@@ -747,13 +795,213 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
                     )
 
     if rect_overflows:
-        warns.append(
+        fails.append(
             f"{len(rect_overflows)} SVG inner rect(s) overflow their container — "
             f"run svg_calc.py stack --container-y to fix: {rect_overflows[0]}"
             + (f"  (+{len(rect_overflows) - 1} more)" if len(rect_overflows) > 1 else "")
         )
     else:
         passes.append("No SVG rect containment overflow detected")
+
+    # 23. SVG marker sizing — marker must not exceed the gap between connected elements
+    marker_issues: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_body = svg_m.group(2)
+            svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+
+            markers: dict[str, tuple[float, float, str]] = {}
+            for mk in SVG_MARKER_ELEM_RE.finditer(svg_body):
+                mk_attrs = mk.group(1)
+                mk_id_m = re.search(r'\bid\s*=\s*["\']([^"\']+)["\']', mk_attrs, re.IGNORECASE)
+                if not mk_id_m:
+                    continue
+                mk_id = mk_id_m.group(1)
+                mk_w = _svg_float(mk_attrs, 'markerWidth', 3.0)
+                mk_h = _svg_float(mk_attrs, 'markerHeight', 3.0)
+                units_m = SVG_MARKER_UNITS_RE.search(mk_attrs)
+                units = units_m.group(1) if units_m else 'strokeWidth'
+                markers[mk_id] = (mk_w, mk_h, units)
+
+            for ln_m in SVG_LINE_ELEM_RE.finditer(svg_body):
+                ln_attrs = ln_m.group(1)
+                ref_m = SVG_MARKER_END_RE.search(ln_attrs)
+                if not ref_m:
+                    continue
+                ref_id = ref_m.group(1)
+                if ref_id not in markers:
+                    continue
+
+                x1 = _svg_float(ln_attrs, 'x1')
+                y1 = _svg_float(ln_attrs, 'y1')
+                x2 = _svg_float(ln_attrs, 'x2')
+                y2 = _svg_float(ln_attrs, 'y2')
+                gap = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+                mk_w, mk_h, units = markers[ref_id]
+                sw = _svg_float(ln_attrs, 'stroke-width', 1.0)
+
+                if units.lower() == 'userspaceonuse':
+                    eff_h = mk_h
+                else:
+                    eff_h = mk_h * sw
+
+                if gap > 0 and eff_h > gap:
+                    ln = line_no(html, svg_pos + ln_m.start())
+                    marker_issues.append(
+                        f"{sid} line {ln}: marker #{ref_id} effective height "
+                        f"{eff_h:.0f}px exceeds {gap:.0f}px gap "
+                        f"(markerHeight={mk_h}, units={units}, stroke-width={sw})"
+                    )
+
+    if marker_issues:
+        fails.append(
+            f"{len(marker_issues)} SVG marker(s) exceed their arrow gap — "
+            f"add markerUnits=\"userSpaceOnUse\" and resize; "
+            f"run svg_calc.py marker --gap <px>: {marker_issues[0]}"
+            + (f"  (+{len(marker_issues) - 1} more)" if len(marker_issues) > 1 else "")
+        )
+    else:
+        passes.append("No oversized SVG markers detected (effective size within arrow gap)")
+
+    # 24. Duplicate SVG marker IDs — same ID in multiple SVGs causes rendering conflicts
+    all_marker_ids: list[tuple[str, str, int]] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_body = svg_m.group(2)
+            svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+            for mk in SVG_MARKER_ELEM_RE.finditer(svg_body):
+                mk_attrs = mk.group(1)
+                mk_id_m = re.search(r'\bid\s*=\s*["\']([^"\']+)["\']', mk_attrs, re.IGNORECASE)
+                if mk_id_m:
+                    ln = line_no(html, svg_pos + mk.start())
+                    all_marker_ids.append((mk_id_m.group(1), sid, ln))
+
+    marker_id_counts = Counter(mid for mid, _, _ in all_marker_ids)
+    dup_markers = {mid: [(s, l) for m, s, l in all_marker_ids if m == mid]
+                   for mid, cnt in marker_id_counts.items() if cnt > 1}
+
+    if dup_markers:
+        details = []
+        for mid, locs in dup_markers.items():
+            loc_str = ", ".join(f"{s} line {l}" for s, l in locs)
+            details.append(f'id="{mid}" in {loc_str}')
+        fails.append(
+            f"{len(dup_markers)} duplicate SVG marker ID(s) — "
+            f"rename to unique IDs (e.g., arr<slide_number>): {'; '.join(details)}"
+        )
+    else:
+        passes.append("No duplicate SVG marker IDs across diagrams")
+
+    # 25. SVG viewBox bottom-gap — excessive padding below content
+    svg_bottomgaps: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_attrs = svg_m.group(1)
+            svg_body  = svg_m.group(2)
+            svg_pos   = sb.start() + len(sb.group(1)) + svg_m.start()
+
+            vb_m = SVG_VIEWBOX_ATTR_RE.search(svg_attrs)
+            if not vb_m:
+                continue
+            parts = vb_m.group(1).split()
+            if len(parts) != 4:
+                continue
+            try:
+                vb_y = float(parts[1])
+                vb_h = float(parts[3])
+                if vb_h <= 0:
+                    continue
+                max_bottom = _svg_max_bottom(svg_body)
+                if max_bottom <= 0:
+                    continue
+                bottom_gap = ((vb_y + vb_h) - max_bottom) / vb_h
+                if bottom_gap > SVG_GAP_THRESHOLD:
+                    ln = line_no(html, svg_pos)
+                    svg_bottomgaps.append(
+                        f"{sid} line {ln}: content ends at y={max_bottom:.0f} in viewBox "
+                        f"height={vb_h:.0f} ({bottom_gap*100:.0f}% bottom gap) — "
+                        f"tighten to viewBox height ~{max_bottom + 20:.0f}"
+                    )
+            except (ValueError, IndexError):
+                pass
+
+    if svg_bottomgaps:
+        fails.append(
+            f"{len(svg_bottomgaps)} SVG viewBox(es) with bottom gap > "
+            f"{SVG_GAP_THRESHOLD*100:.0f}%: {svg_bottomgaps[0]}"
+            + (f"  (+{len(svg_bottomgaps) - 1} more)" if len(svg_bottomgaps) > 1 else "")
+        )
+    else:
+        passes.append(f"SVG viewBox bottom gaps within {SVG_GAP_THRESHOLD*100:.0f}% threshold")
+
+    # 26. SVG viewBox aspect ratio — too-wide diagrams render small on 16:9 slides
+    svg_ratio_issues: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_attrs = svg_m.group(1)
+            svg_pos   = sb.start() + len(sb.group(1)) + svg_m.start()
+
+            vb_m = SVG_VIEWBOX_ATTR_RE.search(svg_attrs)
+            if not vb_m:
+                continue
+            parts = vb_m.group(1).split()
+            if len(parts) != 4:
+                continue
+            try:
+                vb_w = float(parts[2])
+                vb_h = float(parts[3])
+                if vb_h <= 0 or vb_w <= 0:
+                    continue
+                ratio = vb_w / vb_h
+                if ratio > SVG_MAX_ASPECT_RATIO:
+                    ln = line_no(html, svg_pos)
+                    svg_ratio_issues.append(
+                        f"{sid} line {ln}: viewBox {vb_w:.0f}x{vb_h:.0f} "
+                        f"ratio {ratio:.1f}:1 exceeds {SVG_MAX_ASPECT_RATIO}:1 max — "
+                        f"reduce width or increase height to fill slide"
+                    )
+            except (ValueError, IndexError):
+                pass
+
+    if svg_ratio_issues:
+        fails.append(
+            f"{len(svg_ratio_issues)} SVG viewBox(es) with aspect ratio > "
+            f"{SVG_MAX_ASPECT_RATIO}:1 (renders small on 16:9 slides): "
+            f"{svg_ratio_issues[0]}"
+            + (f"  (+{len(svg_ratio_issues) - 1} more)" if len(svg_ratio_issues) > 1 else "")
+        )
+    else:
+        passes.append(f"SVG viewBox aspect ratios within {SVG_MAX_ASPECT_RATIO}:1 threshold")
+
+    # 27. Blacklisted Material Icons — known-bad icon names that render incorrectly
+    blocked_icon_hits: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        slide_body = sb.group(3)
+        for im in MATERIAL_ICON_SPAN_RE.finditer(slide_body):
+            icon_name = im.group(1).strip().lower()
+            if icon_name in ICON_BLOCKLIST:
+                icon_pos = sb.start() + len(sb.group(1)) + im.start()
+                ln = line_no(html, icon_pos)
+                alt = ICON_BLOCKLIST[icon_name]
+                blocked_icon_hits.append(
+                    f"{sid} line {ln}: '{icon_name}' is blacklisted — "
+                    f"use {alt} instead"
+                )
+
+    if blocked_icon_hits:
+        fails.append(
+            f"{len(blocked_icon_hits)} blacklisted Material Icon(s) found: "
+            f"{blocked_icon_hits[0]}"
+            + (f"  (+{len(blocked_icon_hits) - 1} more)" if len(blocked_icon_hits) > 1 else "")
+        )
+    else:
+        passes.append("No blacklisted Material Icons found")
 
     return passes, warns, fails
 

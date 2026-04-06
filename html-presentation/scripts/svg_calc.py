@@ -18,6 +18,8 @@ Commands:
   viewbox     Compute required viewBox height given a list of y:height pairs
   arrow       Generate SVG path `d` for a vertical connector arrow between two boxes
   layout      JSON-driven full layout (boxes + arrows + viewBox) for flow diagrams
+  marker      Compute SVG marker dimensions for a given arrow gap size
+  audit       Audit an existing viewBox for wasted space and bad aspect ratio
 
 Run any command with --help for details.
 """
@@ -425,6 +427,94 @@ def cmd_layout(args):
 
 
 # ---------------------------------------------------------------------------
+# marker
+# ---------------------------------------------------------------------------
+def cmd_marker(args):
+    p = argparse.ArgumentParser(prog="svg_calc.py marker")
+    p.add_argument("--gap",          "-g", type=float, required=True,
+                   help="Gap in px between source bottom and target top")
+    p.add_argument("--stroke-width", "-s", type=float, default=2.0,
+                   help="Stroke width of the connector line (default 2)")
+    p.add_argument("--ratio",        "-r", type=float, default=0.7,
+                   help="Fraction of the gap the marker should occupy (default 0.7)")
+    a = p.parse_args(args)
+
+    marker_h = round(a.gap * a.ratio, 1)
+    marker_w = round(marker_h * 1.43, 1)
+    ref_x = marker_w
+    ref_y = round(marker_h / 2, 1)
+
+    bad_h = marker_h * a.stroke_width
+    bad_w = marker_w * a.stroke_width
+
+    print(f"\nMarker sizing for gap={a.gap}px, stroke-width={a.stroke_width}, ratio={a.ratio}\n")
+    print(f"  markerUnits    : userSpaceOnUse  (REQUIRED — prevents stroke-width scaling)")
+    print(f"  markerWidth    : {marker_w}")
+    print(f"  markerHeight   : {marker_h}")
+    print(f"  refX           : {ref_x}")
+    print(f"  refY           : {ref_y}")
+    print(f"\n  Without userSpaceOnUse (BAD): effective {bad_w} x {bad_h} — "
+          f"{'OVERFLOWS gap' if bad_h > a.gap else 'fits but oversized'}")
+
+    if a.gap < 14:
+        print(f"\n  WARNING: gap {a.gap}px is below 14px minimum — increase gap between elements")
+
+    print(f'\n  Paste-ready:\n')
+    print(f'  <defs>')
+    print(f'    <marker id="arrN" markerWidth="{marker_w}" markerHeight="{marker_h}" '
+          f'refX="{ref_x}" refY="{ref_y}" orient="auto" markerUnits="userSpaceOnUse">')
+    print(f'      <polygon points="0 0, {marker_w} {ref_y}, 0 {marker_h}" fill="var(--accent)"/>')
+    print(f'    </marker>')
+    print(f'  </defs>')
+    print()
+
+
+# ---------------------------------------------------------------------------
+# audit
+# ---------------------------------------------------------------------------
+def cmd_audit(args):
+    p = argparse.ArgumentParser(prog="svg_calc.py audit")
+    p.add_argument("--viewbox", "-v", type=str, required=True,
+                   help='viewBox value, e.g. "0 0 800 300"')
+    p.add_argument("--elements", "-e", type=str, required=True,
+                   help='Comma-separated y:height pairs of all content elements')
+    a = p.parse_args(args)
+
+    vb_parts = a.viewbox.split()
+    if len(vb_parts) != 4:
+        print("ERROR: viewBox must have 4 values (min-x min-y width height)")
+        sys.exit(1)
+    vb_x, vb_y, vb_w, vb_h = (float(v) for v in vb_parts)
+
+    pairs = []
+    for token in a.elements.split(","):
+        token = token.strip()
+        if ":" not in token:
+            print(f"ERROR: malformed element '{token}' -- expected y:height")
+            sys.exit(1)
+        y_str, h_str = token.split(":", 1)
+        pairs.append((float(y_str), float(h_str)))
+
+    min_y = min(y for y, h in pairs)
+    max_bottom = max(y + h for y, h in pairs)
+    top_gap = (min_y - vb_y) / vb_h * 100 if vb_h > 0 else 0
+    bottom_gap = ((vb_y + vb_h) - max_bottom) / vb_h * 100 if vb_h > 0 else 0
+    ratio = vb_w / vb_h if vb_h > 0 else 0
+    ideal_h = max_bottom + 20
+
+    print(f"\nviewBox audit: {vb_x:.0f} {vb_y:.0f} {vb_w:.0f} {vb_h:.0f}\n")
+    print(f"  Content y range : {min_y:.0f} to {max_bottom:.0f} ({max_bottom - min_y:.0f}px)")
+    print(f"  Top gap         : {top_gap:.0f}% {'FAIL (>12%)' if top_gap > 12 else 'OK'}")
+    print(f"  Bottom gap      : {bottom_gap:.0f}% {'FAIL (>12%)' if bottom_gap > 12 else 'OK'}")
+    print(f"  Aspect ratio    : {ratio:.2f}:1 {'FAIL (>2.5:1)' if ratio > 2.5 else 'OK'}")
+    print(f"  Ideal viewBox h : {ideal_h:.0f} (content + 20px margin)")
+    if ratio > 2.5:
+        min_h = round(vb_w / 2.5)
+        print(f"  Min height for ratio: {min_h} (to get 2.5:1)")
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 COMMANDS = {
@@ -435,6 +525,8 @@ COMMANDS = {
     "arrow":      cmd_arrow,
     "grid":       cmd_grid,
     "layout":     cmd_layout,
+    "marker":     cmd_marker,
+    "audit":      cmd_audit,
 }
 
 USAGE = """\
@@ -448,6 +540,8 @@ Commands:
   viewbox     required viewBox height from y:height element pairs
   arrow       SVG path d for a vertical connector arrow
   layout      full flow diagram coordinates from a JSON spec
+  marker      compute marker dimensions for a given arrow gap
+  audit       audit an existing viewBox for wasted space and bad ratio
 
 Examples:
   python scripts/run_script.py svg_calc.py stack --count 5 --box-height 48 --gap 12
@@ -457,6 +551,8 @@ Examples:
   python scripts/run_script.py svg_calc.py arrow --cx 150 --from-y 68 --to-y 84
   python scripts/run_script.py svg_calc.py grid --cols 3 --rows 2 --box-width 180 --box-height 48
   python scripts/run_script.py svg_calc.py layout --inline '{"viewbox_width":300,"box_width":220,"box_height":48,"gap":16,"start_y":20,"boxes":[{"label":"Source table"},{"label":"Filter rows"},{"label":"Aggregate"}]}'
+  python scripts/run_script.py svg_calc.py marker --gap 16 --stroke-width 2
+  python scripts/run_script.py svg_calc.py audit --viewbox "0 0 800 300" --elements "30:45,90:45,150:45,60:175,100:35,145:35,190:35"
 """
 
 if __name__ == "__main__":

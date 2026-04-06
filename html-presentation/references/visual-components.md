@@ -6,6 +6,10 @@ Every slide MUST use at least one of these components. Text-only slides are not 
 - **External links:** Every `<a href="https://...">` MUST include `target="_blank" rel="noopener"` — the validator fails any external anchor missing either attribute.
 - **List alignment:** Every `<ul>` and `<ol>` MUST include `text-align:left` as an inline style or via a CSS class — prevents misalignment when a parent container centers text.
 - **Connector arrows and flow lines MUST use `var(--accent)` or a bright visible color — NEVER `var(--border)`, dark gray, or any color that blends into the dark slide background.** This applies to: Material Icon `arrow_forward` between step flow cards, SVG `<line>` and `<path>` connectors in architecture/inline diagrams, and any other visual connector element. Invisible arrows defeat the purpose of a flow diagram.
+- **Blacklisted Material Icons** — the following icon names render incorrectly or ambiguously in the Material Icons Round font and MUST NOT be used. Use the suggested alternative instead:
+  | Blocked icon | Problem | Use instead |
+  |---|---|---|
+  | `monitoring` | Renders as a generic desktop monitor, not a monitoring/analytics graphic | `query_stats`, `analytics`, or `trending_up` |
 
 ---
 
@@ -192,6 +196,23 @@ Use for: system architecture, data pipelines, integration maps.
 Build from basic SVG shapes (`rect`, `circle`, `path`, `text`). Keep it readable at 900px wide.
 
 **Connector lines and arrowheads MUST use `var(--accent)` or a contrasting bright color** — never `stroke="#2a2a2a"`, `stroke="var(--border)"`, or any near-black/dark-gray value. On a dark slide background these are invisible. Use `stroke="var(--accent)"` or a specific bright hex (e.g. `#29B5E8`, `#10B981`) for every `<line>`, `<path>`, and SVG marker stroke.
+
+**SVG arrow markers MUST use `markerUnits="userSpaceOnUse"`** to prevent markers from scaling with stroke-width. The SVG default `markerUnits="strokeWidth"` multiplies marker dimensions by the line's `stroke-width` value, producing oversized arrowheads (e.g., an 8x6 marker at `stroke-width="2"` renders at 16x12 user units). Always set `markerUnits="userSpaceOnUse"` so dimensions are absolute viewBox units. Use dimensions 10x7 with `refX="10" refY="3.5"` as the standard arrow marker size. Minimum gap between connected elements should be >= 14px to accommodate the marker without visual crowding. Each SVG diagram MUST define its own uniquely-named marker ID (e.g., `arr7`, `arr12`) — never reuse the same `id` (like `id="arrowhead"`) across multiple SVGs in the same HTML document, as duplicate IDs cause rendering conflicts where the browser uses whichever definition it finds first.
+
+Standard marker template:
+```html
+<defs>
+  <marker id="arrN" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+    <polygon points="0 0, 10 3.5, 0 7" fill="var(--accent)"/>
+  </marker>
+</defs>
+```
+
+Replace `arrN` with a unique ID per SVG (convention: `arr` + slide number, e.g., `arr7` for slide 7). Run `svg_calc.py marker --gap <px>` to compute marker dimensions for non-standard gap sizes.
+
+**SVG viewBox MUST be tight to content bounds** — the gap between the last content element's bottom edge and the viewBox bottom should not exceed 12% of the viewBox height. Excessive bottom padding causes the diagram to render smaller than necessary. After placing all elements, set viewBox height to `max_content_bottom + 20px`. Run `svg_calc.py viewbox --elements "y1:h1,y2:h2,..."` to compute the correct height.
+
+**SVG viewBox aspect ratio MUST be <= 2.5:1** (width:height). Diagrams wider than 2.5:1 render too small on 16:9 presentation slides because the browser preserves the SVG's aspect ratio and the available vertical space goes unused. For a diagram with many horizontal elements, increase the viewBox height (adding vertical padding or spacing) rather than widening the viewBox. Target a ratio between 1.5:1 and 2.2:1 for optimal rendering. If the diagram naturally needs to be wide (e.g., 3-column architecture), use a viewBox height of at least `width / 2.5`.
 
 **SVG container max-height must be ≥ 58vh.** Wrap the SVG in a `<div>` with `style="max-height:65vh;width:100%;"` — values below 58vh create blank bands on the slide and will trigger a validator warning.
 
