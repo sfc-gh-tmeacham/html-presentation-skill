@@ -11,12 +11,13 @@ Works on two file types:
 Prints one line per URL::
 
     200  https://example.com/page
+    403* https://bot-protected.example.com  (likely bot protection)
     404  https://dead.example.com/gone
-    <urlopen error ...>  https://timeout.example.com
+    ERR  https://timeout.example.com  <urlopen error ...>
 
 Exit codes:
-  0  all URLs returned 200
-  1  one or more URLs returned non-200 or errored
+  0  all URLs returned 200 (or only 403-bot-blocked)
+  1  one or more URLs returned non-200 or errored (excluding bot-blocked)
   2  usage / file-not-found error
 
 Usage::
@@ -31,7 +32,9 @@ Options::
 
 import argparse
 import re
+import ssl
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -64,11 +67,37 @@ def extract_urls(text: str, mode: str) -> list[str]:
     return sorted(result)
 
 
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+
 def check_url(url: str, timeout: int = 10) -> str:
+    ctx = ssl.create_default_context()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        code = urllib.request.urlopen(req, timeout=timeout).status
+        req = urllib.request.Request(url, headers=_BROWSER_HEADERS, method="HEAD")
+        code = urllib.request.urlopen(req, timeout=timeout, context=ctx).status
         return str(code)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 405:
+            req = urllib.request.Request(url, headers=_BROWSER_HEADERS, method="GET")
+            try:
+                code = urllib.request.urlopen(req, timeout=timeout, context=ctx).status
+                return str(code)
+            except urllib.error.HTTPError as inner:
+                return str(inner.code)
+        if exc.code == 403:
+            return "403-bot-blocked"
+        return str(exc.code)
     except Exception as exc:
         return str(exc)
 
@@ -108,12 +137,20 @@ def main() -> None:
 
     print(f"Checking {len(urls)} URL(s) in '{path.name}' (mode: {mode})...")
     failures: list[str] = []
+    bot_blocked: list[str] = []
     for url in urls:
         result = check_url(url)
-        print(f"  {result}  {url}")
-        if result != "200":
+        if result == "403-bot-blocked":
+            print(f"  403*  {url}  (likely bot protection — verify manually or use web_fetch)")
+            bot_blocked.append(url)
+        elif result != "200":
+            print(f"  {result}  {url}")
             failures.append(url)
+        else:
+            print(f"  {result}  {url}")
 
+    if bot_blocked:
+        print(f"\n{len(bot_blocked)} URL(s) returned 403 (likely bot protection — not counted as failures).")
     if failures:
         print(f"\n{len(failures)} URL(s) returned non-200 — fix or remove them before proceeding.")
         sys.exit(1)

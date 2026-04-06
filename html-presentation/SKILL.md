@@ -78,7 +78,29 @@ If no checkpoint files exist, proceed normally from Step 1.
 
 ### Step 1: Gather Content
 
-Collect information from the user in **two batched rounds** (three if presenter/image details are needed). Use `ask_user_question` to present multiple questions per round rather than asking one at a time.
+Collect information from the user in **three batched rounds** (four if presenter/image details are needed). Use `ask_user_question` to present multiple questions per round rather than asking one at a time.
+
+**Round 0 — Source material (always ask first):**
+
+Before asking about topic or audience, explicitly ask the user what content they want to base the presentation on. Use `ask_user_question` with a multi-select:
+
+"What source material should this presentation be based on?" Options:
+- **URLs** — "I have one or more web pages (blog posts, docs, guides)"
+- **Documents** — "I have files (PDF, Word, notes, transcripts)"
+- **My own knowledge** — "I'll describe the topic and key points myself"
+- **Existing slides** — "I have a prior deck I want to rebuild or restyle"
+
+This question is mandatory even if the user already provided content in their initial message. If they did, acknowledge what they provided and ask: "I see you shared [URL / document / topic description]. Do you have any additional source material you'd like to include, or is this everything?"
+
+**Processing source material:**
+
+For each source the user provides:
+- **URLs**: Fetch and store each one following the "Handling URL-based source material" rules below. If multiple URLs are provided, fetch all of them and store each as a separate `[topic-slug]-source-N.md` file (or a single combined `[topic-slug]-source-content.md` with clear section dividers).
+- **Documents**: Read the file(s) using the `read` tool. Store a copy in the presentation folder. Extract topic, key points, and terminology to pre-fill Round 1 and Round 2 defaults.
+- **Own knowledge**: No pre-processing needed — proceed to Round 1 and let the user describe the topic.
+- **Existing slides**: Read the file (HTML, PDF, or PPTX). Extract the slide structure, content, and styling to inform the new deck plan. Store a copy in the presentation folder.
+
+After all source material is collected and stored, proceed to Round 1 with pre-filled defaults derived from the source content (topic name, suggested key points, suggested slide count based on content depth).
 
 **Round 1 — Core info (ask all at once):**
 - **Topic** and audience
@@ -125,7 +147,21 @@ Only ask if the user selected Presenter slide or Custom logo/graphics in Round 2
 2. Use the new `[folder]/filename` path in all subsequent references
 3. Inform the user: "Copied `filename` to the presentation folder."
 
+**Source material processing rules** (referenced by Round 0 above):
+
 If the user provides a document, transcript, or notes, extract these elements automatically and propose defaults for each field above.
+
+**Handling URL-based source material:** When the user provides a URL as the topic source (e.g., a blog post, documentation page, or guide):
+
+1. **Fetch the complete content** using the `web_fetch` tool. Do NOT assume that a single fetch captures everything — check if the returned content appears truncated (e.g., the page structure ends mid-section, content is cut off, or the response metadata indicates partial content).
+2. **If content is truncated**, make additional `web_fetch` calls or use `browser_snapshot` / `browser_navigate` to capture the remaining sections. Continue until the full page content is captured.
+3. **Store the raw content** as `[folder]/[topic-slug]-source-content.md` immediately after fetching. This file is the authoritative reference for all content decisions — it persists across context resets so the agent never needs to re-fetch.
+4. **Never assume partial content is sufficient.** If the source page has N sections (visible from headings or a table of contents), verify all N sections are present in the stored content. If any are missing, fetch again or navigate to anchor links to capture them.
+5. **Add the source artifact to `manifest.json`:**
+   ```json
+   "source_content": {"path": "[topic-slug]-source-content.md", "source_url": "https://...", "status": "complete"}
+   ```
+6. **Pass the full stored content** (not a summary) to the Research Subagent prompt and to each slide-building subagent. Reference the file path so subagents can read it directly if the inline content is too large.
 
 **After gathering topic and customer, create the presentation folder:**
 
@@ -161,6 +197,10 @@ presenter:
   - name: "Jane Doe"
     title: "Solutions Architect"
     photo: "acme/cortex-ai/pasted_headshot_1711700000.png"
+sources:
+  - type: "url"
+    path: "cortex-ai-overview-source-content.md"
+    original: "https://www.snowflake.com/en/developers/guides/..."
 custom_graphics: []
 ```
 
@@ -241,6 +281,8 @@ For any URL that returns a non-200 status or times out:
 3. If the source is the only citation for a key fact, downgrade that fact from `[EXTRACTED]` to `[INFERRED]` and note the dead link
 
 This validation runs on the brief — the HTML link validation in Step 3 is a separate check on links written into the deck itself.
+
+**Bot-detection fallback:** If `validate_urls.py` reports `403-bot-blocked` for any URL, use the `web_fetch` tool to validate those URLs individually. If `web_fetch` returns content successfully, the URL is valid — ignore the 403. If `web_fetch` also fails, the URL is genuinely broken.
 
 ---
 
@@ -579,6 +621,8 @@ If the deck has no user-provided images, no SVGs, and no Snowflake logo (only Ma
 python scripts/run_script.py validate_urls.py [folder]/[topic-slug]-[audience-slug]-slides.html
 ```
 Any URL returning a non-200 status MUST be replaced with a live equivalent before proceeding. After fixing any broken URLs, re-run `generate_qr_appendix.py` — it is idempotent and will rebuild QR codes to encode the corrected links. Do not proceed to Step 4 with unresolved broken links.
+
+**Bot-detection fallback:** If `validate_urls.py` reports `403-bot-blocked` for any URL, use the `web_fetch` tool to verify those URLs individually. If `web_fetch` returns content, the URL is valid. Only replace URLs that fail both methods.
 
 For all image/graphics technical details, see `references/graphics-embedding.md`.
 
