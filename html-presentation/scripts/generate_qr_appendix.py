@@ -55,7 +55,7 @@ PAGE_TITLE_RE = re.compile(r'<title[^>]*>([^<]+)</title>', re.IGNORECASE)
 ACCENT_RE = re.compile(r"--accent:\s*(#[0-9A-Fa-f]{3,8})\s*;")
 TOTAL_RE = re.compile(r'(<span\s+id="total">)\d+(</span>)')
 COUNTER_RE = re.compile(r'<div\s+class="counter"')
-SLIDE_ID_RE = re.compile(r'<div\b[^>]*\bid="s(\d+)"', re.IGNORECASE)
+SLIDE_ID_RE = re.compile(r'<div\b[^>]*?\bid="s(\d+)"', re.IGNORECASE)
 APPENDIX_SLIDE_RE = re.compile(
     r'\n?<!-- Slide \d+: Links \(Appendix\) -->.*?(?=\n?<!-- Slide|\n?<div\s+class="counter")',
     re.DOTALL | re.IGNORECASE,
@@ -292,7 +292,7 @@ def build_appendix_slide(
 
     slide = (
         f'\n<!-- Slide {slide_num}: Links (Appendix) -->\n'
-        f'<div class="slide" id="s{slide_num}">\n'
+        f'<div id="s{slide_num}" class="slide">\n'
         f'  <div class="slide-inner">\n'
         f'    <h2 class="anim">{heading}</h2>\n'
         f'    <p class="anim" style="font-size:16px;color:#666;margin-bottom:28px;'
