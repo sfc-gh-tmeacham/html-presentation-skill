@@ -29,18 +29,87 @@ import argparse
 import json
 import math
 
+try:
+    from PIL import ImageFont as _ImageFont
+    _HAVE_PILLOW = True
+except ImportError:
+    _HAVE_PILLOW = False
 
-# ---------------------------------------------------------------------------
-# Character width estimation (monospace-ish, SVG font-size 12px)
-# Rough average for sans-serif at 12px: ~6.5px per char.
-# This is deliberately conservative — better to over-size than clip.
-# ---------------------------------------------------------------------------
-CHAR_WIDTH_PX_PER_PT = 0.65   # width per font-size unit, per character
+_FONT_PATHS = [
+    "/Library/Fonts/Arial Unicode.ttf",
+    "/System/Library/Fonts/HelveticaNeue.ttc",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/SFNS.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+]
+
+_BOLD_FONT_PATHS = [
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+]
+
+_font_cache: dict = {}
 
 
-def estimate_text_width(text: str, font_size: int = 12) -> int:
-    """Return estimated pixel width of `text` rendered at `font_size`."""
-    return math.ceil(len(text) * font_size * CHAR_WIDTH_PX_PER_PT)
+def _load_font(font_size: int, bold: bool = False):
+    """Return a PIL ImageFont for the given size, or None if unavailable."""
+    if not _HAVE_PILLOW:
+        return None
+    key = (font_size, bold)
+    if key in _font_cache:
+        return _font_cache[key]
+    paths = _BOLD_FONT_PATHS + _FONT_PATHS if bold else _FONT_PATHS
+    for path in paths:
+        try:
+            font = _ImageFont.truetype(path, font_size)
+            _font_cache[key] = font
+            return font
+        except (OSError, IOError):
+            continue
+    _font_cache[key] = None
+    return None
+
+
+_CHAR_WIDTH_TABLE = {
+    'i': 0.31, 'l': 0.31, '1': 0.40, 'j': 0.33, 'r': 0.39, 't': 0.38,
+    'f': 0.38, 'I': 0.36, '|': 0.27, '!': 0.36, ':': 0.36, ';': 0.36,
+    ',': 0.36, '.': 0.36, ' ': 0.30,
+    'W': 0.88, 'M': 0.83, 'm': 0.83, 'w': 0.79, 'O': 0.74, 'Q': 0.74,
+    'G': 0.72, 'C': 0.67, 'D': 0.72, 'H': 0.72, 'N': 0.72, 'U': 0.67,
+    '@': 0.85, '%': 0.72,
+}
+_DEFAULT_CHAR_WIDTH = 0.57
+
+_SAFETY_BUFFER = 5
+
+
+def estimate_text_width(text: str, font_size: int = 12, bold: bool = False) -> int:
+    """Return estimated pixel width of `text` at `font_size`.
+
+    Uses Pillow (PIL.ImageFont) with a system font when available for
+    per-glyph accuracy.  Falls back to a per-character width table when no
+    system font can be loaded.
+    """
+    font = _load_font(font_size, bold=bold)
+    if font is not None:
+        bbox = font.getbbox(text)
+        return (bbox[2] - bbox[0]) + _SAFETY_BUFFER
+    raw = sum(_CHAR_WIDTH_TABLE.get(c, _DEFAULT_CHAR_WIDTH) for c in text) * font_size
+    if bold:
+        raw *= 1.15
+    return math.ceil(raw)
+
+
+def _measurement_method() -> str:
+    """Return a short label describing which measurement path is active."""
+    if _load_font(12) is not None:
+        return "Pillow/font"
+    if _HAVE_PILLOW:
+        return "per-char table (no system font found)"
+    return "per-char table (Pillow not available)"
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +134,8 @@ def cmd_stack(args):
     p.add_argument("--start-y",      "-y", type=int,   default=20)
     p.add_argument("--box-width",    "-W", type=int,   default=None)
     p.add_argument("--font-size",    "-f", type=int,   default=12)
+    p.add_argument("--bold",               action="store_true", default=False,
+                   help="Treat labels as bold text for width estimation")
     p.add_argument("--labels",       "-l", type=str,   default=None)
     p.add_argument("--container-y",  "-c", type=int,   default=None,
                    help="y of the outer container rect — outputs required container height")
@@ -91,7 +162,7 @@ def cmd_stack(args):
         width_warn = ""
         if label and a.box_width:
             h_pad = 24
-            min_w = estimate_text_width(label, a.font_size) + h_pad
+            min_w = estimate_text_width(label, a.font_size, bold=a.bold) + h_pad
             if min_w > a.box_width:
                 width_warn = f"  ⚠ TEXT MAY CLIP: need ~{min_w}px, have {a.box_width}px"
                 warnings.append(f"Box {i}: '{label}' needs ~{min_w}px width")
@@ -135,14 +206,18 @@ def cmd_textbox(args):
     p.add_argument("--text",      "-t", type=str,  action="append", required=True)
     p.add_argument("--font-size", "-f", type=int,  default=12)
     p.add_argument("--padding",   "-p", type=int,  default=24)
+    p.add_argument("--bold",            action="store_true", default=False,
+                   help="Estimate for bold text (uses bold font or 1.15x multiplier)")
     a = p.parse_args(args)
 
-    print(f"\nText width estimates (font-size={a.font_size}, h-padding={a.padding})\n")
+    method = _measurement_method()
+    bold_tag = " bold" if a.bold else ""
+    print(f"\nText width estimates (font-size={a.font_size}{bold_tag}, h-padding={a.padding}, method={method})\n")
     print(f"{'Label':<45} {'text_px':>8}  {'min_rect_w':>10}")
     print("-" * 68)
     max_w = 0
     for text in a.text:
-        tw = estimate_text_width(text, a.font_size)
+        tw = estimate_text_width(text, a.font_size, bold=a.bold)
         min_w = tw + a.padding
         max_w = max(max_w, min_w)
         print(f"  {text:<43} {tw:>8}  {min_w:>10}")
@@ -546,6 +621,7 @@ Commands:
 Examples:
   python scripts/run_script.py svg_calc.py stack --count 5 --box-height 48 --gap 12
   python scripts/run_script.py svg_calc.py textbox --text "WAREHOUSE_METERING_HISTORY" --font-size 12
+  python scripts/run_script.py svg_calc.py textbox --text "Bold Label Here" --font-size 12 --bold
   python scripts/run_script.py svg_calc.py distribute --width 720 --margin 30 --count 4
   python scripts/run_script.py svg_calc.py viewbox --elements "20:48,84:48,148:60" --width 300
   python scripts/run_script.py svg_calc.py arrow --cx 150 --from-y 68 --to-y 84
