@@ -220,47 +220,7 @@ If the user selects **Yes**, launch a `general-purpose` subagent **before** Step
 
 **Subagent type:** `general-purpose` | **readonly:** `true`
 
-Prompt:
-```
-Research the following topic for a presentation and return a structured brief.
-
-Topic: [TOPIC]
-Audience: [AUDIENCE]
-Key points to cover: [KEY_POINTS]
-Executive mode: [EXEC_MODE — true or false]
-
-## Accuracy rules (read carefully before writing anything)
-
-**Wrong is 3x worse than unknown.** Do not guess. If you are not confident in a fact, label it
-`[INFERRED]` or omit it entirely. A slide that says "we're not sure of the exact figure" is
-recoverable. A slide with a wrong number in front of a customer is not.
-
-Label every fact, statistic, example, and quote with one of two tags:
-- `[EXTRACTED]` — the information was stated directly in a source you can cite (verbatim or
-  close paraphrase). Include the source inline: `[EXTRACTED] (Source: Name, Year/URL)`
-- `[INFERRED]` — the information is your synthesis, estimation, or logical inference from
-  multiple sources. Include a brief basis: `[INFERRED] (Basis: derived from X and Y)`
-
-For any statistic about a specific named organization (account counts, employee headcount,
-revenue, data volumes, growth percentages), ALSO prefix it with `[UNVERIFIED — confirm with
-customer]` regardless of its EXTRACTED/INFERRED tag.
-
-If you cannot find a credible source for a claim, say so explicitly rather than inventing one.
-
-Return:
-1. 3–5 compelling statistics or data points — each tagged [EXTRACTED] or [INFERRED] with citation
-2. 2–3 concrete real-world examples or case studies — each tagged with source
-3. 1–2 strong quotes from credible sources — [EXTRACTED] only; do not fabricate quotes
-4. Key terminology or concepts the audience needs to know
-5. Common objections or questions the audience may raise
-6. Suggested narrative arc: problem → insight → solution → outcome
-
-If `exec_mode` is true: restructure the narrative arc as **conclusion → evidence → context** (BLUF
-order). The executive already knows the problem — lead with the recommendation, then prove it, then
-provide context only if needed.
-
-Be specific. Format as a structured markdown brief. Do not write slide copy — only gather raw material.
-```
+Prompt: Read `references/research-prompt.md` and use its full contents as the subagent prompt, substituting `[TOPIC]`, `[AUDIENCE]`, `[KEY_POINTS]`, and `[EXEC_MODE]` with the current values.
 
 Use the returned brief as the factual foundation for slide copy in Step 2.
 
@@ -360,29 +320,11 @@ Every deck follows this proven flow:
 
 Adjust the number of core content slides based on topic complexity. Simple topics: 5–7 total slides. Moderate topics: 10–15 slides. Deep-dive topics: 20–25 slides. Never exceed 30 slides.
 
-**Executive Deck Structure (exec_mode):** When `exec_mode` is true, replace the standard flow with the following:
-
-| Slide | Purpose | Content |
-|-------|---------|---------|
-| **1. Title** | Set the stage | Big title, subtitle, your name or brand |
-| **2. Executive Summary** | **BLUF — lead with the conclusion** | The recommendation or key takeaway, stated directly. Use a CTA Block or Stat Callout. No bullets, no build-up. |
-| **3. Context** | Brief "why this matters" (1 slide max) | Background or problem framing — keep it tight |
-| **4–6. Supporting Evidence** | Prove the recommendation | Data, comparisons, case study, or key metrics |
-| **7. Call to Action** | Specific ask | Clear next step, owner, and timeline |
-
-Cap executive decks at **7 content slides**. No Agenda slide.
+**Executive Deck Structure (exec_mode):** When `exec_mode` is true, follow the executive deck plan in Step 2 (BLUF-first, 7-slide cap, no Agenda slide). Cap at **7 content slides**.
 
 **Presenter Slide (optional):** If the user requests a presenter slide, include it immediately after the Title slide (before the Agenda). The Presenter slide does NOT count toward the slide count max.
 
-**Presenter slide visual rules:**
-- If there is **one presenter**: use a centered layout with the optional headshot above the name and title. The headshot should be displayed in a circle (`border-radius: 50%`, `width: clamp(100px, 12vmin, 160px)`, `height: clamp(100px, 12vmin, 160px)`, `object-fit: cover`) with a subtle accent-colored ring border (`border: 3px solid var(--accent)`). Name in bold white (`clamp(1.5rem, 2.5vw, 2.25rem)`), title in secondary color (`clamp(1rem, 1.5vw, 1.5rem)`) below.
-- If there are **two presenters**: use a two-column side-by-side layout, each column centered with circular headshot, name, and title.
-- If there are **three or more presenters**: use a card grid (2 or 3 columns) with one card per presenter. Maximum of 9 presenters — `insert_presenter.py` will error if this limit is exceeded.
-- If **no headshot is provided** for a presenter, display a Material Icon placeholder (`person` icon, `clamp(3rem, 5vw, 4.5rem)`, accent-colored) inside the circle instead.
-- Stagger the card/column animations for sequential reveal.
-- The heading should be a small uppercase `h3` label (e.g., "Presented By", "Your Presenters", "Meet the Team") with the accent color.
-- **All presenter headshots MUST be circularly cropped using CSS** (`border-radius: 50%; object-fit: cover; width/height equal`). Do NOT pre-crop the source image.
-- Headshot images must be processed through the Graphics Embedding Rules (see `references/graphics-embedding.md`).
+**Presenter slide visual rules:** See the **Presenter Slide** section in `references/visual-components.md` for exact layout, headshot sizing, and CSS values for 1, 2, and 3+ presenter layouts. All presenter headshots MUST be circularly cropped (`border-radius: 50%; object-fit: cover; equal width/height`). Maximum of 9 presenters — `insert_presenter.py` will error if this limit is exceeded.
 
 For HTML patterns, see the **Presenter Slide** section in `references/visual-components.md`.
 
@@ -399,21 +341,7 @@ For HTML patterns, see the **Presenter Slide** section in `references/visual-com
 - The heading should be a small uppercase `h3` label (e.g., "Agenda", "What We'll Cover", "Today's Session") with the accent color, NOT a large `h2`
 - Prefer a card grid over a plain text list — it looks more polished and consistent with the rest of the deck. A simple icon list is acceptable for short agendas (3 items or fewer) where a card grid would feel heavy.
 
-Example HTML structure:
-```html
-<h3 class="anim">What We'll Cover</h3>
-<div class="card-grid anim stagger" style="grid-template-columns: repeat(3, 1fr);">
-  <div class="card" style="text-align:left;">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <span style="color:var(--accent);font-weight:700;font-size:clamp(1rem,1.5vw,1.5rem);">01</span>
-      <span class="material-icons-round" style="color:var(--accent);font-size:clamp(1.5rem,2.5vw,2rem);">icon_name</span>
-    </div>
-    <h4 style="font-size:clamp(0.9rem,1.4vw,1.2rem);">Section Title</h4>
-    <p style="font-size:clamp(0.75rem,1.1vw,1rem);">Brief descriptor</p>
-  </div>
-  <!-- repeat for each section -->
-</div>
-```
+For the full HTML pattern, see the **Agenda** section in `references/visual-components.md`.
 
 ---
 
@@ -602,6 +530,8 @@ Each slide is built by its own subagent. This gives every slide — especially t
 
 3. **Update `manifest.json`** after each slide with `html: {status: "building", "last_slide": N}`. After the final slide, set `html: {status: "complete", "last_slide": N}`.
 
+4. **Report progress to the user** after each successful slide: output a short message such as `Slide N/[total]: [slide title]`. For the final slide output: `All [total] slides complete.`
+
 **Resuming after interruption:**
 
 If the HTML file already exists when Phase 2 starts, search for `<!-- INSERT_SLIDE_N -->` to find the resume point. Skip all completed slides and continue from slide N. Inform the user: "Resuming from slide N."
@@ -656,36 +586,7 @@ Inform the user: "Validating the deck — this may take a minute." Then delegate
 
 **Subagent type:** `general-purpose` | **readonly:** `false`
 
-Prompt:
-```
-Validate and fix the HTML slide deck at: [folder]/[topic-slug]-[audience-slug]-slides.html
-Working directory: [skill-root]/ (the parent of the presentation folder, where `scripts/` is located).
-
-Step 1: Run the validator with context enabled:
-  python scripts/run_script.py validate_deck.py [folder]/[topic-slug]-[audience-slug]-slides.html --context 5
-
-  The `--context 5` flag prints +/-5 lines around each warning/failure, with any base64
-  content automatically redacted to `[base64 data omitted — Nkb]`. This gives you all
-  the context needed to make each fix. **Do NOT use the Read tool to open the HTML file
-  directly** — the validator output is sufficient and avoids base64 flooding your context.
-
-Step 2: For each reported issue, apply the fix using the Edit tool with the exact
-  surrounding text shown in the context snippet. Each message includes a slide ID and
-  line number (e.g. `s10 line 450 →`) to pinpoint the location.
-
-  Key fix rules (from SKILL.md Content Rules and HTML Output):
-  - SVG containers: `max-height` >= 58vh (lower values cause excess empty slide space)
-  - No `transform="rotate("` on `<text>` elements (rotated text = layout problem)
-  - Lists with icon markers: parent `<ul>` must set `list-style: none; padding: 0;`
-  - All `<a>` tags: must have `target="_blank" rel="noopener"`
-  - Bulleted lists: must use `text-align: left` even inside centered containers
-  - SVG stacked rects: `y_N + height_N + 10 < y_(N+1)` (no overlapping, 10px min gap)
-  - No `display:none` for slide transitions — use `opacity` + `pointer-events` only
-
-Step 3: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
-
-Return a one-line summary: "PASS — N slides, all checks clean" or "Fixed N issues: [brief list]". If validation still fails after 3 attempts, list the remaining errors.
-```
+Prompt: Read `references/validation-prompt.md` and use its full contents as the subagent prompt, substituting `[folder]`, `[topic-slug]`, `[audience-slug]`, and `[skill-root]` with the current values.
 
 **Visual QA (after validator passes):**
 
