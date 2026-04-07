@@ -135,6 +135,10 @@ html-presentaion-skill/          ← repo root
     │   ├── accent-colors.md
     │   ├── css-animations.md
     │   ├── graphics-embedding.md
+    │   ├── material-icons.md
+    │   ├── presentation-runtime.md
+    │   ├── research-prompt.md
+    │   ├── validation-prompt.md
     │   └── visual-components.md
     └── scripts/
         ├── run_script.py

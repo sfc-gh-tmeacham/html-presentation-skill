@@ -6,10 +6,7 @@ Every slide MUST use at least one of these components. Text-only slides are not 
 - **External links:** Every `<a href="https://...">` MUST include `target="_blank" rel="noopener"` — the validator fails any external anchor missing either attribute.
 - **List alignment:** Every `<ul>` and `<ol>` MUST include `text-align:left` as an inline style or via a CSS class — prevents misalignment when a parent container centers text.
 - **Connector arrows and flow lines MUST use `var(--accent)` or a bright visible color — NEVER `var(--border)`, dark gray, or any color that blends into the dark slide background.** This applies to: Material Icon `arrow_forward` between step flow cards, SVG `<line>` and `<path>` connectors in architecture/inline diagrams, and any other visual connector element. Invisible arrows defeat the purpose of a flow diagram.
-- **Blacklisted Material Icons** — the following icon names render incorrectly or ambiguously in the Material Icons Round font and MUST NOT be used. Use the suggested alternative instead:
-  | Blocked icon | Problem | Use instead |
-  |---|---|---|
-  | `monitoring` | Renders as a generic desktop monitor, not a monitoring/analytics graphic | `query_stats`, `analytics`, or `trending_up` |
+- **Material Icons** — for blacklisted names and a full curated icon list organized by concept and industry, see [`references/material-icons.md`](material-icons.md). Do not invent icon names.
 
 ---
 
