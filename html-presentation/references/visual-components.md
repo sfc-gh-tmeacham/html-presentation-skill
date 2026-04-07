@@ -13,6 +13,40 @@ Every slide MUST use at least one of these components. Text-only slides are not 
 
 ---
 
+## Quick Reference
+
+| Component | Use For | Type |
+|---|---|---|
+| [Card Grid](#card-grid) | 2–4 cards in a row, icon + title + description | CSS |
+| [Comparison Panel](#comparison-panel) | Two columns side by side with a divider | CSS |
+| [Stat Callout](#stat-callout) | One huge number with a short label | CSS |
+| [Step Flow](#step-flow) | Numbered steps with arrows between them | CSS |
+| [Quote Block](#quote-block) | Large quotation marks, italic text, attribution | CSS |
+| [Icon + Label List](#icon--label-list) | Vertical list with icons on left, labels on right | CSS |
+| [Code Block](#code-block) | Monospace text on a dark card, syntax coloring | CSS |
+| [Timeline](#timeline) | Horizontal line with dots and labels above/below | CSS |
+| [Image + Caption](#image--caption) | Centered image with caption below | HTML |
+| [Metric Dashboard](#metric-dashboard) | 3–4 stat boxes in a row | CSS |
+| [Architecture Diagram](#architecture-diagram) | SVG boxes + arrows for system/data flow | SVG |
+| [Progress Ring](#progress-ring) | Animated SVG circle fill with percentage inside | SVG |
+| [Animated Counter](#animated-counter) | Large number counting up from 0 to target | CSS |
+| [Gradient Illustration](#gradient-illustration) | Decorative CSS gradients / layered shapes | CSS |
+| [Inline SVG Diagram](#inline-svg-diagram) | Custom SVG shapes + arrows depicting a concept | SVG |
+| [Custom Graphic](#custom-graphic) | User-provided image (logo, screenshot, diagram) | HTML |
+| [Table](#table) | Styled HTML table for structured comparisons | HTML |
+| [Two-Column Layout](#two-column-layout) | Content left, visual right (or vice versa) | CSS |
+| [CTA Block](#cta-block) | Call-to-action for takeaway or closing slides | CSS |
+| [Callout Banner](#callout-banner) | Accent banner for warnings, tips, key notes | CSS |
+| [Tag / Badge Row](#tag--badge-row) | Pill badges for technologies or categories | CSS |
+| [Presenter Slide](#presenter-slide) | Presenter photo, name, title after title slide | CSS |
+| [Vertical Bar Chart](#vertical-bar-chart) | Vertical CSS flexbox bars sized by percentage | CSS |
+| [Horizontal Bar Chart](#horizontal-bar-chart) | Horizontal CSS bars; best for long labels or 5+ categories | CSS |
+| [Line / Area Chart](#line--area-chart) | SVG polyline/polygon for trends over time | SVG |
+| [Donut Chart](#donut-chart) | SVG stroke-dasharray segments for part-to-whole | SVG |
+| [Title Slide](#title-slide) | Animated gradient opening slide with Snowflake logo | CSS |
+
+---
+
 ## Card Grid
 2–4 cards in a row, each with an icon, title, and one-line description.
 Use for: features, benefits, categories.
@@ -470,6 +504,151 @@ Use for the optional presenter slide immediately after the Title slide. See SKIL
   <!-- repeat for each presenter -->
 </div>
 ```
+
+---
+
+## Vertical Bar Chart
+CSS flexbox bars sized by percentage. No coordinate math required.
+Use for: quarterly comparisons, ranked values, before/after metrics.
+
+```html
+<div class="anim chart-v" style="width:100%;">
+  <div style="display:flex;align-items:flex-end;justify-content:center;
+    gap:clamp(12px,2vw,28px);height:clamp(140px,22vh,220px);
+    border-bottom:1px solid var(--border);position:relative;">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:80px;">
+      <span style="font-size:0.8rem;font-weight:600;color:var(--accent);">$4.2M</span>
+      <div style="width:100%;height:62%;background:var(--accent);border-radius:6px 6px 0 0;"></div>
+    </div>
+    <!-- repeat for each bar; vary height % proportional to max value -->
+  </div>
+  <div style="display:flex;justify-content:center;gap:clamp(12px,2vw,28px);margin-top:8px;">
+    <span style="flex:1;max-width:80px;text-align:center;font-size:0.75rem;color:var(--secondary);">Q1</span>
+    <!-- repeat label for each bar -->
+  </div>
+</div>
+```
+
+- Set each bar's `height` as a `%` relative to the max value (max = 100%, others proportional).
+- Use `background:var(--accent)` for the primary series; use `#10B981`, `#F59E0B` for multi-series.
+- Wrap in a Two-Column Layout when pairing with a stat or bullet list.
+
+---
+
+## Horizontal Bar Chart
+CSS flexbox bars sized by percentage width. Best when category labels are long or there are more than 5 categories.
+Use for: ranking lists, survey results, feature adoption, multi-category comparisons.
+
+```html
+<div class="anim stagger chart-h" style="display:flex;flex-direction:column;gap:14px;width:100%;">
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span style="min-width:120px;text-align:right;font-size:0.85rem;color:var(--secondary);">Category A</span>
+    <div style="flex:1;height:28px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+      <div style="height:100%;width:75%;background:var(--accent);border-radius:4px;"></div>
+    </div>
+    <span style="min-width:40px;font-size:0.85rem;font-weight:600;color:var(--text);">75%</span>
+  </div>
+  <!-- repeat row for each category -->
+</div>
+```
+
+- Set each bar's `width` as a `%` of its max value.
+- `class="anim stagger"` on the wrapper animates bars in sequence on slide enter.
+- Vary bar color for emphasis: accent for the top/highlighted row, `rgba(255,255,255,0.25)` for others.
+
+---
+
+## Line / Area Chart
+Inline SVG using `<polyline>` (line only) or `<polygon>` (filled area beneath the line).
+Use for: trends over time, growth curves, before/after comparisons across periods.
+
+```html
+<svg viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:40vh;">
+  <defs>
+    <linearGradient id="areaFillN" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0"/>
+    </linearGradient>
+  </defs>
+  <!-- optional grid lines -->
+  <line x1="0" y1="40" x2="600" y2="40" stroke="var(--border)" stroke-width="1"/>
+  <line x1="0" y1="100" x2="600" y2="100" stroke="var(--border)" stroke-width="1"/>
+  <line x1="0" y1="160" x2="600" y2="160" stroke="var(--border)" stroke-width="1"/>
+  <!-- filled area: close polygon to bottom corners -->
+  <polygon points="0,160 120,130 240,80 360,50 480,30 600,20 600,180 0,180"
+    fill="url(#areaFillN)"/>
+  <!-- line on top -->
+  <polyline points="0,160 120,130 240,80 360,50 480,30 600,20"
+    fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- data point dots -->
+  <circle cx="0" cy="160" r="4" fill="var(--accent)"/>
+  <circle cx="120" cy="130" r="4" fill="var(--accent)"/>
+  <!-- x-axis labels -->
+  <text x="0" y="198" text-anchor="middle" fill="#666" font-size="12">Jan</text>
+  <text x="120" y="198" text-anchor="middle" fill="#666" font-size="12">Feb</text>
+</svg>
+```
+
+- Replace `areaFillN` with a unique gradient ID per slide (e.g., `areaFill7` for slide 7).
+- **Y-coordinate formula:** `y = chart_bottom - (value / max_value) × chart_height`. For a 180px chart area (bottom at y=180): `y = 180 - (value / max_value × 180)`.
+- Use `<polyline>` alone (drop the polygon) for a line-only chart without fill.
+- For a second series add another polyline in a contrasting color (e.g., `#10B981`).
+
+---
+
+## Donut Chart
+SVG `stroke-dasharray` technique. One `<circle>` per segment positioned by offset.
+Use for: part-to-whole proportions, market share, budget allocation (2–5 segments max).
+
+```html
+<div class="anim" style="display:flex;align-items:center;gap:40px;justify-content:center;width:100%;">
+  <svg viewBox="0 0 200 200" style="width:clamp(140px,18vw,200px);height:clamp(140px,18vw,200px);flex-shrink:0;">
+    <!-- circumference of r=80: 2π×80 ≈ 502.65 -->
+    <!-- Segment 1: 60% → arc = 301.6; starts at top via rotate(-90) -->
+    <circle cx="100" cy="100" r="80" fill="none"
+      stroke="var(--accent)" stroke-width="28" stroke-linecap="butt"
+      stroke-dasharray="301.6 502.65"
+      stroke-dashoffset="0"
+      transform="rotate(-90 100 100)"/>
+    <!-- Segment 2: 25% → arc = 125.66; offset = -301.6 -->
+    <circle cx="100" cy="100" r="80" fill="none"
+      stroke="#10B981" stroke-width="28" stroke-linecap="butt"
+      stroke-dasharray="125.66 502.65"
+      stroke-dashoffset="-301.6"
+      transform="rotate(-90 100 100)"/>
+    <!-- Segment 3: 15% → arc = 75.4; offset = -(301.6+125.66) = -427.26 -->
+    <circle cx="100" cy="100" r="80" fill="none"
+      stroke="#F59E0B" stroke-width="28" stroke-linecap="butt"
+      stroke-dasharray="75.4 502.65"
+      stroke-dashoffset="-427.26"
+      transform="rotate(-90 100 100)"/>
+    <!-- center label -->
+    <text x="100" y="95" text-anchor="middle" fill="white" font-size="28" font-weight="700">60%</text>
+    <text x="100" y="118" text-anchor="middle" fill="#666" font-size="12">Primary</text>
+  </svg>
+  <!-- legend -->
+  <div style="display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:12px;height:12px;border-radius:2px;background:var(--accent);flex-shrink:0;"></div>
+      <span style="font-size:0.875rem;color:var(--text);">Segment A — 60%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:12px;height:12px;border-radius:2px;background:#10B981;flex-shrink:0;"></div>
+      <span style="font-size:0.875rem;color:var(--text);">Segment B — 25%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:12px;height:12px;border-radius:2px;background:#F59E0B;flex-shrink:0;"></div>
+      <span style="font-size:0.875rem;color:var(--text);">Segment C — 15%</span>
+    </div>
+  </div>
+</div>
+```
+
+**Segment math** (circumference C = 2π × r; for r=80, C ≈ 502.65):
+- Arc length for segment = `(percentage / 100) × C`
+- `stroke-dasharray` = `arc_length C`
+- `stroke-dashoffset` for segment N = `-(sum of all previous arc lengths)`
+- All circles use `transform="rotate(-90 cx cy)"` so segment 1 starts at the top (12 o'clock)
 
 ---
 

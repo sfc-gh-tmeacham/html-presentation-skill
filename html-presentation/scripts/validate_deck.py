@@ -63,6 +63,9 @@ Checks performed:
 27. **Blacklisted Material Icons** — fails when a slide contains a
    ``material-icons-round`` span whose text matches a known-bad icon name
    (renders incorrectly or ambiguously); replace with a suggested alternative
+28. **Duplicate linearGradient IDs** — fails when the same
+   ``<linearGradient id="...">`` is defined more than once across all SVGs
+   in the document; use unique IDs per chart (e.g., ``areaFill<slide_number>``)
 
 Usage::
 
@@ -117,6 +120,7 @@ VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r"linear-gradient",
     r"radial-gradient",
     r"conic-gradient",
+    r'class="[^"]*chart-[vh]',
 ]]
 
 SLIDE_RE = re.compile(
@@ -145,6 +149,11 @@ MATERIAL_ICON_SPAN_RE = re.compile(
     r'<span[^>]*class="material-icons-round"[^>]*>\s*([a-z_]+)\s*</span>',
     re.IGNORECASE,
 )
+GRADIENT_ID_RE = re.compile(
+    r'<linearGradient\b([^>]*)>',
+    re.IGNORECASE,
+)
+
 ICON_BLOCKLIST: dict[str, str] = {
     "monitoring": "query_stats, analytics, or trending_up",
 }
@@ -906,6 +915,38 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         )
     else:
         passes.append("No duplicate SVG marker IDs across diagrams")
+
+    # 28. Duplicate linearGradient IDs — same ID in multiple SVGs breaks area chart fills
+    all_gradient_ids: list[tuple[str, str, int]] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
+            svg_body = svg_m.group(2)
+            svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+            if _LOGO_SVG_RE.search(svg_m.group(1)):
+                continue
+            for gm in GRADIENT_ID_RE.finditer(svg_body):
+                g_attrs = gm.group(1)
+                gid_m = re.search(r'\bid\s*=\s*["\']([^"\']+)["\']', g_attrs, re.IGNORECASE)
+                if gid_m:
+                    ln = line_no(html, svg_pos + gm.start())
+                    all_gradient_ids.append((gid_m.group(1), sid, ln))
+
+    gradient_id_counts = Counter(gid for gid, _, _ in all_gradient_ids)
+    dup_gradients = {gid: [(s, l) for g, s, l in all_gradient_ids if g == gid]
+                     for gid, cnt in gradient_id_counts.items() if cnt > 1}
+
+    if dup_gradients:
+        details = []
+        for gid, locs in dup_gradients.items():
+            loc_str = ", ".join(f"{s} line {l}" for s, l in locs)
+            details.append(f'id="{gid}" in {loc_str}')
+        fails.append(
+            f"{len(dup_gradients)} duplicate linearGradient ID(s) — "
+            f"rename to unique IDs (e.g., areaFill<slide_number>): {'; '.join(details)}"
+        )
+    else:
+        passes.append("No duplicate linearGradient IDs across SVGs")
 
     # 25. SVG viewBox bottom-gap — excessive padding below content
     svg_bottomgaps: list[str] = []

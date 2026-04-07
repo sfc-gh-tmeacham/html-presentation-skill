@@ -431,7 +431,7 @@ Read `references/presentation-runtime.md` for the complete nav HTML/CSS, slide t
 
 Every single slide MUST have a visual component. Text-only slides are not allowed.
 
-**Read `references/visual-components.md`** for the full catalog with HTML/CSS for each component: Card Grid, Comparison Panel, Stat Callout, Step Flow, Quote Block, Icon + Label List, Code Block, Timeline, Image + Caption, Metric Dashboard, Architecture Diagram, Progress Ring, Animated Counter, Gradient Illustration, Inline SVG Diagram, Custom Graphic, Table, Two-Column Layout, CTA Block, Callout Banner, Tag / Badge Row.
+**Read `references/visual-components.md`** for the full catalog with HTML/CSS for each component: Card Grid, Comparison Panel, Stat Callout, Step Flow, Quote Block, Icon + Label List, Code Block, Timeline, Image + Caption, Metric Dashboard, Architecture Diagram, Progress Ring, Animated Counter, Gradient Illustration, Inline SVG Diagram, Custom Graphic, Table, Two-Column Layout, CTA Block, Callout Banner, Tag / Badge Row, Vertical Bar Chart, Horizontal Bar Chart, Line / Area Chart, Donut Chart.
 
 ---
 
