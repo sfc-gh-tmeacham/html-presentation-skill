@@ -178,6 +178,8 @@ Use for: code examples, command line, config files.
 
 Wrap tokens in `<span class="kw">`, `<span class="str">`, `<span class="var">`, `<span class="cm">`.
 
+**Animation:** use the JS typewriter (Pattern 14 in `references/css-animations.md`) for a character-by-character reveal that preserves syntax-highlight span coloring. The pattern locks the container to its full-content height before animating so the slide layout never shifts, then types each visible character at ~6 ms/char with a blinking accent cursor that disappears after typing completes.
+
 ---
 
 ## Timeline

@@ -23,7 +23,7 @@ Use animations when they help the audience understand content — revealing step
 ## When NOT to Animate
 
 - Static comparison panels or tables (the audience needs to scan, not wait)
-- Code blocks (motion distracts from reading code)
+- Code block text: avoid CSS clip sweeps or full-block fades that hide content mid-read; use the JS typewriter (Pattern 14) instead — it reveals characters in sequence while preserving syntax-highlight span coloring
 - Body text or quote blocks (let the content be immediately readable)
 - Anything that loops infinitely unless it represents a live/ongoing state (exceptions: pulse for "live", shimmer for "loading", gradient-shift for ambient title backgrounds)
 
@@ -171,6 +171,67 @@ A repeating box-shadow pulse that draws attention to a highlighted card without 
 }
 ```
 Replace the hardcoded `rgba(41,181,232,...)` with the deck's actual accent color at 25% opacity. Use only on one card per slide — applying to multiple elements simultaneously looks cluttered.
+
+### 14. Code block typewriter (JS — multi-line with syntax coloring)
+Character-by-character reveal that preserves syntax-highlight `<span>` coloring. Locks the container to its full-height before animating so the slide layout never shifts. A blinking accent cursor tracks the insertion point and disappears 800 ms after typing completes.
+
+**Required CSS** — add to the deck `<style>` block:
+```css
+@keyframes blinkCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.tw-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: blinkCaret 0.7s step-end infinite;
+  margin-left: 1px;
+}
+@media (prefers-reduced-motion: reduce) { .tw-cursor { animation: none; } }
+```
+
+**Required JS** — add once per deck, before the closing `</body>`:
+```javascript
+function twTypewrite(el, html, speed = 6) {
+  let total = 0;
+  for (let i = 0; i < html.length; ) {
+    if (html[i] === '<') { i = html.indexOf('>', i) + 1; } else { total++; i++; }
+  }
+  let shown = 0;
+  const timer = setInterval(() => {
+    if (shown > total) {
+      clearInterval(timer);
+      el.innerHTML = html;
+      return;
+    }
+    let out = '', count = 0;
+    for (let i = 0; i < html.length && count < shown; ) {
+      if (html[i] === '<') {
+        const end = html.indexOf('>', i);
+        out += html.slice(i, end + 1);
+        i = end + 1;
+      } else { out += html[i]; count++; i++; }
+    }
+    el.innerHTML = out + '<span class="tw-cursor"></span>';
+    shown++;
+  }, speed);
+}
+```
+
+**Wiring up a code block:**
+```javascript
+const cb = document.getElementById('my-code-block');
+const SOURCE = cb.innerHTML;         // store the pre-rendered HTML with spans
+cb.style.height = cb.scrollHeight + 'px';  // lock height before clearing
+cb.innerHTML = '';
+twTypewrite(cb, SOURCE);             // start on slide enter (or setTimeout)
+```
+
+Key rules:
+- Store `innerHTML` *before* calling `cb.innerHTML = ''` — that HTML is the source string.
+- Lock `height` via `scrollHeight` measurement *before* clearing so the slide layout never reflows during animation.
+- Add `white-space: pre-wrap` on `.code-block` (required regardless of animation).
+- For `prefers-reduced-motion`: skip the call to `twTypewrite` and leave `cb.innerHTML = SOURCE` intact.
 
 ## Rules
 
