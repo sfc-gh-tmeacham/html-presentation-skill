@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "Pillow>=9.0",
+# ]
+# ///
 """Insert a presenter slide into an existing slide deck HTML file.
 
 Automates the full pipeline: resize headshot images, convert to base64,

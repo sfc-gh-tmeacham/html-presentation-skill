@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "Pillow>=9.0",
+# ]
+# ///
 """Resize a raster image so its longest side does not exceed a given max size.
 
 Preserves aspect ratio and uses Lanczos resampling for sharp downscaling.

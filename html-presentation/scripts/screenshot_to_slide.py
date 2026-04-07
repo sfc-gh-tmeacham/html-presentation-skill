@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "Pillow>=9.0",
+# ]
+# ///
 """Prepare a screenshot or photo for slide embedding in a single step.
 
 Pipeline:

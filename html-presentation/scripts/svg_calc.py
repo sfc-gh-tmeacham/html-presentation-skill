@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "Pillow>=9.0",
+# ]
+# ///
 """
 svg_calc.py — SVG coordinate calculator for HTML presentations
 

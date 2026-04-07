@@ -37,7 +37,8 @@ from typing import Any
 if sys.version_info < (3, 9):
     sys.exit("Error: Python 3.9+ is required.")
 
-# Dependencies required by the helper scripts (Pillow is the only external one).
+# Dependencies required by the helper scripts — used by the stdlib venv fallback
+# when uv is not available. Keep in sync with each script's PEP 723 header.
 DEPENDENCIES: list[str] = ["Pillow>=9.0", "segno>=1.0"]
 
 SCRIPT_DIR: Path = Path(__file__).resolve().parent
@@ -306,6 +307,23 @@ def main() -> None:
     target_path = resolve_target(target_name)
     script_args = filtered_argv[1:]
 
+    # Fast path: when uv is available, delegate entirely to `uv run`.  uv reads
+    # each script's PEP 723 inline metadata, installs deps into an isolated cache
+    # env, and executes — no local .venv required.
+    if _has_command("uv"):
+        uv = shutil.which("uv")
+        cmd = [uv, "run", str(target_path)] + script_args
+        if _IS_WINDOWS:
+            result = subprocess.run(cmd)
+            sys.exit(result.returncode)
+        else:
+            try:
+                os.execv(uv, cmd)
+            except OSError as exc:
+                print(f"Error: Could not execute 'uv': {exc}", file=sys.stderr)
+                sys.exit(1)
+
+    # uv not available — fall back to shared local venv managed by this script.
     # Some scripts (img_to_base64.py, svg_optimize.py, color_swap_svg.py) only
     # use the standard library and don't need Pillow.  We still run them inside
     # the venv for consistency and isolation.

@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "segno>=1.0",
+# ]
+# ///
 """Append QR-code appendix slide(s) to an HTML presentation.
 
 Scans the deck for all ``<a href="https://...">`` links, generates an inline

@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "Pillow>=9.0",
+# ]
+# ///
 """Replace placeholder tokens in an HTML slide deck with embedded assets.
 
 This script enables a two-phase build workflow:
