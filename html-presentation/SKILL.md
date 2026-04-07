@@ -393,17 +393,17 @@ For the full HTML pattern, see the **Agenda** section in `references/visual-comp
 
 Generate a single self-contained HTML file. No external images or base64-encoded assets inline. One external CDN link is permitted: Material Icons Round (`fonts.googleapis.com/icon?family=Material+Icons+Round`). All other assets must be self-contained.
 
-**Layout:** Fullscreen slides (100vw x 100vh), content centered, max-width `min(1200px, 92vw)`, padding `clamp(1.5rem, 4vh, 3.5rem) clamp(1.5rem, 5vw, 4rem)`. Fill the viewport — designs that leave large side margins waste screen real estate, especially on projectors and wide monitors.
+**Layout:** Fullscreen slides (100vw x 100vh), content centered, max-width `min(1320px, 95vw)`, padding `clamp(1.65rem, 4.4vh, 3.85rem) clamp(1.65rem, 5.5vw, 4.4rem)`. Fill the viewport — designs that leave large side margins waste screen real estate, especially on projectors and wide monitors.
 
 **Colors:** Background `#0a0a0a`, text `#ffffff`, secondary `#a0a0a0`, cards `#1a1a1a`, borders `#2a2a2a`, plus one accent color per deck (see `references/accent-colors.md`).
 
 **Typography:** Use relative units — no hardcoded `px` for font sizes or spacing. Reference values:
-- H2 slide titles: `clamp(2.5rem, 4vw, 4rem)`
-- H3 eyebrow labels: `clamp(0.85rem, 1.2vw, 1rem)`
-- Body / list items: `clamp(1rem, 1.6vw, 1.5rem)`
-- Stat numbers: `clamp(4rem, 7vw, 6rem)` in accent color
-- Code blocks: `clamp(0.875rem, 1.2vw, 1.125rem)` monospace
-- Small captions: `clamp(0.75rem, 1vw, 0.9rem)`
+- H2 slide titles: `clamp(2.75rem, 4.4vw, 4.4rem)`
+- H3 eyebrow labels: `clamp(0.935rem, 1.32vw, 1.1rem)`
+- Body / list items: `clamp(1.1rem, 1.76vw, 1.65rem)`
+- Stat numbers: `clamp(4.4rem, 7.7vw, 6.6rem)` in accent color
+- Code blocks: `clamp(0.96rem, 1.32vw, 1.24rem)` monospace
+- Small captions: `clamp(0.825rem, 1.1vw, 0.99rem)`
 
 For spacing (padding, margin, gap) use `vh`/`vw` or `rem` instead of `px`. When setting a `px` value makes sense (e.g., icon size, border width, border-radius), keep it — but never for layout dimensions or font sizes.
 

@@ -272,12 +272,12 @@ def build_appendix_slide(
             continue
         card = (
             f'      <div style="background:rgba(255,255,255,0.04);border-radius:16px;'
-            f'padding:24px;text-align:center;width:260px;">\n'
-            f'        <div style="width:220px;height:220px;margin:0 auto;">\n'
+            f'padding:1.5rem;text-align:center;width:16.25rem;">\n'
+            f'        <div style="width:13.75rem;height:13.75rem;margin:0 auto;">\n'
             f"          {svg}\n"
             f'        </div>\n'
-            f'        <p style="font-size:14px;color:#ccc;'
-            f'margin-top:14px;line-height:1.3;">'
+            f'        <p style="font-size:0.875rem;color:#ccc;'
+            f'margin-top:0.875rem;line-height:1.3;">'
             f'<a href="{escape(url)}" target="_blank" rel="noopener" '
             f'style="border-bottom:none;color:#ccc;">{escape(title)}</a></p>\n'
             f"      </div>"
@@ -295,10 +295,10 @@ def build_appendix_slide(
         f'<div id="s{slide_num}" class="slide">\n'
         f'  <div class="slide-inner">\n'
         f'    <h2 class="anim">{heading}</h2>\n'
-        f'    <p class="anim" style="font-size:16px;color:#666;margin-bottom:28px;'
+        f'    <p class="anim" style="font-size:1rem;color:#666;margin-bottom:1.75rem;'
         f'transition-delay:0.1s;">Scan to open</p>\n'
         f'    <div class="anim" style="display:flex;flex-wrap:wrap;justify-content:center;'
-        f'gap:24px;transition-delay:0.2s;">\n'
+        f'gap:1.5rem;transition-delay:0.2s;">\n'
         f"{cards_html}\n"
         f"    </div>\n"
         f"  </div>\n"
