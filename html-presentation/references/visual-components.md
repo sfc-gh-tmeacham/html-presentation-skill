@@ -21,7 +21,7 @@ Every slide MUST use at least one of these components. Text-only slides are not 
 | [Comparison Panel](#comparison-panel) | Two columns side by side with a divider | CSS |
 | [Stat Callout](#stat-callout) | One huge number with a short label | CSS |
 | [Step Flow](#step-flow) | Numbered steps with arrows between them | CSS |
-| [Quote Block](#quote-block) | Large quotation marks, italic text, attribution | CSS |
+| [Quote Block](#quote-block) | Card with serif opening quote mark, italic text, attribution | CSS |
 | [Icon + Label List](#icon--label-list) | Vertical list with icons on left, labels on right | CSS |
 | [Code Block](#code-block) | Monospace text on a dark card, syntax coloring | CSS |
 | [Timeline](#timeline) | Horizontal line with dots and labels above/below | CSS |
@@ -113,14 +113,20 @@ Use for: processes, tutorials, how-it-works.
 ---
 
 ## Quote Block
-Large quotation marks, italic text, attribution below.
+Card container with an absolutely-positioned serif opening quote mark (`&ldquo;`) in the upper-left corner, italic quote text below with top margin to clear the mark, and an attribution line.
 Use for: testimonials, expert quotes, key statements.
 
+**Required `<head>` dependency** — add this line alongside the Material Icons link:
 ```html
-<div class="anim" style="max-width:700px;text-align:center;">
-  <div style="font-size:80px;color:var(--accent);line-height:0.5;margin-bottom:16px;">"</div>
-  <p style="font-size:26px;font-style:italic;line-height:1.6;">Quote text here.</p>
-  <p style="font-size:16px;color:var(--secondary);margin-top:20px;">— Attribution</p>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+```
+This loads Playfair Display 700, used by the opening quote mark. Without it the mark falls back to Georgia/serif but loses the distinctive curly ornate rendering.
+
+```html
+<div class="card anim" style="padding:clamp(14px,2vh,22px) clamp(16px,2vw,24px) clamp(14px,2vh,22px);position:relative;">
+  <div aria-hidden="true" style="position:absolute;top:-2px;left:10px;font-size:clamp(3.5rem,5.5vw,5rem);color:var(--accent);opacity:0.65;font-family:'Playfair Display',Georgia,'Times New Roman',serif;line-height:1;pointer-events:none;user-select:none;">&ldquo;</div>
+  <p style="font-style:italic;font-size:clamp(0.88rem,1.25vw,1.12rem);line-height:1.65;color:var(--text);margin-top:clamp(28px,3.5vh,40px);">Quote text here.</p>
+  <p style="font-size:clamp(0.78rem,1.05vw,0.95rem);color:var(--secondary);margin-top:10px;">— Attribution Name, Title, Organization</p>
 </div>
 ```
 
