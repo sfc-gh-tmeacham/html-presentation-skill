@@ -128,7 +128,7 @@ Only ask if the user selected Presenter slide or Custom logo/graphics in Round 2
 
 **Handling the title slide logo:**
 - **Snowflake logo**: Note that you will place a `{{SNOWFLAKE_LOGO}}` placeholder in the HTML during Step 3 — the embed phase handles the rest. Do NOT attempt to write any SVG now.
-- **Custom logo (SVG)**: Use a `{{SVG_INLINE:path}}` placeholder (standalone token, not inside `<img>`). If sizing is needed, pass CSS as the second arg: `{{SVG_INLINE:path|height:60px;display:block;margin:0 auto}}`. See `references/graphics-embedding.md`.
+- **Custom logo (SVG)**: Use a `{{LOGO_INLINE:path}}` placeholder (standalone token, not inside `<img>`). If sizing is needed, pass CSS as the second arg: `{{LOGO_INLINE:path|height:60px;display:block;margin:0 auto}}`. This automatically stamps `role="img"` on the SVG so `validate_deck.py` skips geometry checks (aspect ratio, viewBox gaps, etc.) that apply to diagrams but not logos. See `references/graphics-embedding.md`.
 - **Custom logo (raster)**: Use a `{{IMG:path}}` placeholder inside an `<img src="...">` tag.
 - **No logo**: Omit any logo element from the title slide entirely.
 
@@ -609,7 +609,8 @@ If the HTML file already exists when Phase 2 starts, search for `<!-- INSERT_SLI
 **Post-build processing (when the deck includes user-provided images, SVGs, or the Snowflake logo):**
 1. **Embed phase** — Write the HTML with placeholder tokens during Phase 1 and Phase 2. Do NOT write any `<svg>`/`<path>` markup or base64 strings during those phases.
    - `{{SNOWFLAKE_LOGO}}` — standalone token for the Snowflake logo on the title slide
-   - `{{SVG_INLINE:path}}` or `{{SVG_INLINE:path|css-style}}` — standalone token for any user-provided `.svg` file
+   - `{{SVG_INLINE:path}}` or `{{SVG_INLINE:path|css-style}}` — standalone token for diagram/chart SVG files
+   - `{{LOGO_INLINE:path}}` or `{{LOGO_INLINE:path|css-style}}` — standalone token for logo/decorative SVG files (skips geometry validation)
    - `{{IMG:path}}` or `{{IMG:path|max-px}}` — inside `<img src="...">` for raster images (PNG/JPG/etc.)
    After all slides are built, inform the user: "Embedding images — this may take a moment." Then run `python scripts/run_script.py embed_image.py <deck.html>` to resolve all tokens. This happens entirely in Python — no SVG markup or base64 data ever enters the conversation context.
 2. **QR appendix phase** — If the deck contains any `<a>` links to external URLs, inform the user: "Generating QR code appendix." Then run `python scripts/run_script.py generate_qr_appendix.py <deck.html>` to scan for links and append a QR code appendix slide with inline SVG QR codes. The script auto-numbers the new slide and updates the total counter. **The script requires a `<div class="counter"></div>` marker in the HTML** to know where to insert the new slide — this MUST be included in the initial HTML build (see HTML Output > Navigation).

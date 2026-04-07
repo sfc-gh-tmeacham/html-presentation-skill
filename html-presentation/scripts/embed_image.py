@@ -23,7 +23,7 @@ Supported tokens
     Place as a bare standalone token (not inside an ``<img>``).
 
 ``{{SVG_INLINE:path}}`` / ``{{SVG_INLINE:path|css-style}}``
-    Inline a user-provided SVG file directly as an ``<svg>`` element.
+    Inline a user-provided SVG diagram directly as an ``<svg>`` element.
     Safer and more flexible than ``{{IMG:...}}`` for SVGs because:
     - No base64 overhead (SVGs are text)
     - Can inherit CSS custom properties such as ``var(--accent)``
@@ -31,13 +31,23 @@ Supported tokens
     The optional second argument is a CSS style string injected onto the
     root ``<svg>`` element::
 
-        {{SVG_INLINE:customer-logo.svg}}
-        {{SVG_INLINE:customer-logo.svg|height:60px;display:block;margin:0 auto}}
+        {{SVG_INLINE:architecture-diagram.svg}}
+        {{SVG_INLINE:chart.svg|max-height:60vh;width:100%}}
 
     User-provided SVGs are sanitized: ``<script>`` elements, ``on*`` event
     handlers, ``javascript:`` URIs, and XML declarations are stripped.
     Use ``{{IMG:path.svg}}`` instead when you need the SVG inside an
     ``<img>`` tag or when the SVG should not be part of the DOM.
+
+``{{LOGO_INLINE:path}}`` / ``{{LOGO_INLINE:path|css-style}}``
+    Inline a user-provided SVG **logo or decorative image** as an ``<svg>``
+    element.  Identical to ``{{SVG_INLINE:...}}`` except that ``role="img"``
+    is automatically stamped onto the root ``<svg>`` tag.  This signals to
+    ``validate_deck.py`` that the SVG is a logo and should be skipped by
+    geometry checks (aspect-ratio, viewBox gaps, text overflow, etc.)::
+
+        {{LOGO_INLINE:customer-logo.svg}}
+        {{LOGO_INLINE:partner-logo.svg|height:60px;display:block;margin:0 auto}}
 
 Requires Pillow (installed automatically when invoked via run_script.py).
 
@@ -93,6 +103,7 @@ RASTER_EXTENSIONS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 PLACEHOLDER_RE = re.compile(r"\{\{IMG:(.+?)\}\}")
 LOGO_PLACEHOLDER_RE = re.compile(r"\{\{SNOWFLAKE_LOGO\}\}")
 SVG_INLINE_RE = re.compile(r"\{\{SVG_INLINE:(.+?)\}\}")
+LOGO_INLINE_RE = re.compile(r"\{\{LOGO_INLINE:(.+?)\}\}")
 
 _SVG_SCRIPT_RE = re.compile(r"<script[\s\S]*?</script>", re.IGNORECASE)
 _SVG_EVENT_RE = re.compile(r"\s+on\w+\s*=\s*(?:(?P<q>['\"]).*?(?P=q)|\S+)", re.IGNORECASE)
@@ -101,6 +112,7 @@ _SVG_XML_DECL_RE = re.compile(r"<\?xml[^?]*\?>", re.IGNORECASE)
 _SVG_DOCTYPE_RE = re.compile(r"<!DOCTYPE[^>]*>", re.IGNORECASE)
 _SVG_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _SVG_STYLE_ATTR_RE = re.compile(r"(<svg\b[^>]*?)\sstyle=(?P<q>['\"]).*?(?P=q)", re.IGNORECASE)
+_SVG_ROLE_ATTR_RE = re.compile(r"(<svg\b[^>]*?)\srole=(?P<q>['\"]).*?(?P=q)", re.IGNORECASE)
 _SVG_TAG_RE = re.compile(r"(<svg\b)", re.IGNORECASE)
 
 LOGO_SVG_STYLE = (
@@ -178,6 +190,18 @@ def _inject_svg_style(svg_text: str, style: str) -> str:
     return result
 
 
+def _inject_svg_role_img(svg_text: str) -> str:
+    """Stamp role="img" onto the root ``<svg>`` element.
+
+    If a role attribute already exists it is replaced; otherwise a new one
+    is added.  Only the first ``<svg>`` tag is touched.
+    """
+    result, n = _SVG_ROLE_ATTR_RE.subn(r'\1 role="img"', svg_text, count=1)
+    if n == 0:
+        result = _SVG_TAG_RE.sub(r'\1 role="img"', svg_text, count=1)
+    return result
+
+
 def _inline_user_svg(file_path: Path, style: str | None) -> str:
     """Read, sanitize, and optionally restyle a user-provided SVG file.
 
@@ -190,8 +214,8 @@ def _inline_user_svg(file_path: Path, style: str | None) -> str:
     return sanitized
 
 
-def _parse_svg_inline_token(token_body: str) -> tuple[str, str | None]:
-    """Parse ``{{SVG_INLINE:path}}`` or ``{{SVG_INLINE:path|css-style}}``.
+def _parse_svg_token(token_body: str) -> tuple[str, str | None]:
+    """Parse ``{{SVG_INLINE:path}}`` / ``{{LOGO_INLINE:path}}`` token bodies.
 
     Returns:
         A tuple of (file_path_str, css_style_or_None).
@@ -200,6 +224,9 @@ def _parse_svg_inline_token(token_body: str) -> tuple[str, str | None]:
         path_str, _, style_str = token_body.partition("|")
         return path_str.strip(), style_str.strip() or None
     return token_body.strip(), None
+
+
+_parse_svg_inline_token = _parse_svg_token
 
 
 def process_svg_inline(
@@ -215,7 +242,7 @@ def process_svg_inline(
 
     if dry_run:
         for match in SVG_INLINE_RE.finditer(html):
-            path_str, style = _parse_svg_inline_token(match.group(1))
+            path_str, style = _parse_svg_token(match.group(1))
             file_path, resolve_err = resolve_path(path_str, base_dir)
             if resolve_err:
                 errors.append(resolve_err)
@@ -230,7 +257,7 @@ def process_svg_inline(
 
     def _replace(match: re.Match) -> str:
         nonlocal count
-        path_str, style = _parse_svg_inline_token(match.group(1))
+        path_str, style = _parse_svg_token(match.group(1))
         file_path, resolve_err = resolve_path(path_str, base_dir)
 
         if resolve_err:
@@ -258,6 +285,70 @@ def process_svg_inline(
         return inline
 
     result = SVG_INLINE_RE.sub(_replace, html)
+    return result, count, errors
+
+
+def process_logo_inline(
+    html: str, base_dir: Path, dry_run: bool = False
+) -> tuple[str, int, list[str]]:
+    """Replace all ``{{LOGO_INLINE:...}}`` tokens with sanitized inline SVG.
+
+    Identical to :func:`process_svg_inline` except ``role="img"`` is stamped
+    onto the root ``<svg>`` tag so that ``validate_deck.py`` skips geometry
+    checks (aspect-ratio, viewBox gaps, text overflow, etc.) for logo SVGs.
+
+    Returns:
+        A tuple of (modified_html, count_replaced, errors).
+    """
+    errors: list[str] = []
+    count = 0
+
+    if dry_run:
+        for match in LOGO_INLINE_RE.finditer(html):
+            path_str, style = _parse_svg_token(match.group(1))
+            file_path, resolve_err = resolve_path(path_str, base_dir)
+            if resolve_err:
+                errors.append(resolve_err)
+            elif not file_path.exists():
+                errors.append(f"NOT FOUND: {path_str} (resolved: {file_path})")
+            elif file_path.suffix.lower() != ".svg":
+                errors.append(f"NOT SVG: {path_str} — {{{{LOGO_INLINE}}}} only supports .svg files")
+            else:
+                print(f"  WOULD INLINE LOGO SVG: {path_str}" + (f" (style: {style})" if style else ""))
+                count += 1
+        return html, count, errors
+
+    def _replace(match: re.Match) -> str:
+        nonlocal count
+        path_str, style = _parse_svg_token(match.group(1))
+        file_path, resolve_err = resolve_path(path_str, base_dir)
+
+        if resolve_err:
+            errors.append(resolve_err)
+            return match.group(0)
+        if not file_path.exists():
+            errors.append(f"NOT FOUND: {path_str} (resolved: {file_path})")
+            return match.group(0)
+        if file_path.suffix.lower() != ".svg":
+            errors.append(f"NOT SVG: {path_str} — {{{{LOGO_INLINE}}}} only supports .svg files")
+            return match.group(0)
+        st = file_path.stat()
+        if st.st_size > MAX_FILE_SIZE_BYTES:
+            mb = st.st_size / (1024 * 1024)
+            errors.append(f"TOO LARGE: {path_str} ({mb:.1f} MB)")
+            return match.group(0)
+
+        try:
+            inline = _inline_user_svg(file_path, style)
+            inline = _inject_svg_role_img(inline)
+        except Exception as exc:
+            errors.append(f"LOGO_INLINE ERROR: {path_str} — {exc}")
+            return match.group(0)
+
+        count += 1
+        return inline
+
+    result = LOGO_INLINE_RE.sub(_replace, html)
     return result, count, errors
 
 
@@ -427,10 +518,11 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
     """
     html, logo_count, logo_errors = process_logo(html, dry_run=dry_run)
     html, svg_inline_count, svg_inline_errors = process_svg_inline(html, base_dir, dry_run=dry_run)
+    html, logo_inline_count, logo_inline_errors = process_logo_inline(html, base_dir, dry_run=dry_run)
 
     count = 0
     total_bytes = 0
-    errors: list[str] = list(logo_errors) + list(svg_inline_errors)
+    errors: list[str] = list(logo_errors) + list(svg_inline_errors) + list(logo_inline_errors)
 
     if dry_run:
         for match in PLACEHOLDER_RE.finditer(html):
@@ -486,7 +578,7 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
         return data_uri
 
     result = PLACEHOLDER_RE.sub(_replace, html)
-    return result, count + logo_count + svg_inline_count, total_bytes, errors
+    return result, count + logo_count + svg_inline_count + logo_inline_count, total_bytes, errors
 
 
 def main() -> None:

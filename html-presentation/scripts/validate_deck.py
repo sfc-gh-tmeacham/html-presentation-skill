@@ -112,6 +112,7 @@ VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r"<canvas[\s>]",
     r'class="[^"]*code-block',
     r'class="[^"]*styled-table',
+    r"<table[\s>]",
     r"<pre[\s>]",
     r"linear-gradient",
     r"radial-gradient",
@@ -149,6 +150,7 @@ ICON_BLOCKLIST: dict[str, str] = {
 }
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 NOTES_BLOCK_RE = re.compile(r'<div\s+class="speaker-notes"[^>]*>.*?</div>', re.DOTALL | re.IGNORECASE)
+TABLE_BLOCK_RE = re.compile(r"<table\b[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE)
 STYLE_TAG_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
 SCRIPT_TAG_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
 ENTITY_RE = re.compile(r"&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);")
@@ -210,6 +212,7 @@ SVG_MARKER_END_RE = re.compile(
 SVG_MARKER_UNITS_RE = re.compile(
     r'\bmarkerUnits\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE
 )
+_LOGO_SVG_RE = re.compile(r'\brole\s*=\s*["\']img["\']', re.IGNORECASE)
 EXTERNAL_LINK_RE = re.compile(r'<a\s[^>]*href="https?://[^"]*"', re.IGNORECASE)
 APPENDIX_MARKER_RE = re.compile(r'<!-- Slide \d+: Links \(Appendix\) -->')
 APPENDIX_BLOCK_RE = re.compile(
@@ -279,6 +282,7 @@ def context_snippet(html_lines: list[str], line_num: int, n: int) -> str:
 
 def strip_html(text: str) -> str:
     text = NOTES_BLOCK_RE.sub("", text)
+    text = TABLE_BLOCK_RE.sub("", text)
     text = STYLE_TAG_RE.sub("", text)
     text = SCRIPT_TAG_RE.sub("", text)
     text = HTML_TAG_RE.sub(" ", text)
@@ -675,6 +679,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
             svg_attrs = svg_m.group(1)
             svg_body  = svg_m.group(2)
+            if _LOGO_SVG_RE.search(svg_attrs):
+                continue
             svg_pos   = sb.start() + len(sb.group(1)) + svg_m.start()
 
             rects = []
@@ -757,6 +763,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
             svg_body = svg_m.group(2)
             svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+            if _LOGO_SVG_RE.search(svg_m.group(1)):
+                continue
 
             rects = []
             for r in SVG_RECT_ELEM_RE.finditer(svg_body):
@@ -810,6 +818,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
             svg_body = svg_m.group(2)
             svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+            if _LOGO_SVG_RE.search(svg_m.group(1)):
+                continue
 
             markers: dict[str, tuple[float, float, str]] = {}
             for mk in SVG_MARKER_ELEM_RE.finditer(svg_body):
@@ -872,6 +882,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
             svg_body = svg_m.group(2)
             svg_pos  = sb.start() + len(sb.group(1)) + svg_m.start()
+            if _LOGO_SVG_RE.search(svg_m.group(1)):
+                continue
             for mk in SVG_MARKER_ELEM_RE.finditer(svg_body):
                 mk_attrs = mk.group(1)
                 mk_id_m = re.search(r'\bid\s*=\s*["\']([^"\']+)["\']', mk_attrs, re.IGNORECASE)
@@ -903,6 +915,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
             svg_attrs = svg_m.group(1)
             svg_body  = svg_m.group(2)
             svg_pos   = sb.start() + len(sb.group(1)) + svg_m.start()
+            if _LOGO_SVG_RE.search(svg_attrs):
+                continue
 
             vb_m = SVG_VIEWBOX_ATTR_RE.search(svg_attrs)
             if not vb_m:
@@ -945,6 +959,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         for svg_m in SVG_BLOCK_RE.finditer(sb.group(3)):
             svg_attrs = svg_m.group(1)
             svg_pos   = sb.start() + len(sb.group(1)) + svg_m.start()
+            if _LOGO_SVG_RE.search(svg_attrs):
+                continue
 
             vb_m = SVG_VIEWBOX_ATTR_RE.search(svg_attrs)
             if not vb_m:
