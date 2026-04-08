@@ -175,7 +175,26 @@ Use for: code examples, command line, config files.
 
 Wrap tokens in `<span class="kw">`, `<span class="str">`, `<span class="var">`, `<span class="cm">`.
 
-**Animation:** use the JS typewriter (Pattern 14 in `references/css-animations.md`) for a character-by-character reveal that preserves syntax-highlight span coloring. The pattern locks the container to its full-content height before animating so the slide layout never shifts, then types each visible character at ~6 ms/char with a blinking accent cursor that disappears after typing completes.
+**Animation:** Use the typewriter pattern (Pattern 14 in `references/css-animations.md`).
+The correct wiring uses `.tw-pending` to hold the container at its full natural height
+while text is invisible, measures `offsetHeight` after a 650 ms settle delay, then locks
+that height before clearing `innerHTML` and calling `twTypewrite`. Do **not** use
+`scrollHeight` measured at slide-enter time — it returns incorrect values for off-screen
+`position:absolute` slides.
+
+**Named example — Code Block with Typewriter:**
+```json
+{
+  "id": "code-block-typewriter",
+  "label": "Code Block with Typewriter",
+  "category": "interactive",
+  "css_deps": ["tw-cursor", "tw-pending"],
+  "js_deps": ["twTypewrite"],
+  "init_pattern": "enterCodeSlide / leaveCodeSlide via show()",
+  "html": "<div id=\"cb{N}\" class=\"code-block\" style=\"font-size:clamp(0.78rem,1vw,0.92rem);\"><span class=\"kw\">SELECT</span>\n  ...</div>",
+  "notes": "Replace cb{N} with a unique ID. Store innerHTML as cb{N}html before show(0). Wire enterCodeSlide/leaveCodeSlide into show() checking current/prev === slide_index."
+}
+```
 
 ---
 

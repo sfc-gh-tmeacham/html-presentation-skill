@@ -66,6 +66,10 @@ Checks performed:
 28. **Duplicate linearGradient IDs** — fails when the same
    ``<linearGradient id="...">`` is defined more than once across all SVGs
    in the document; use unique IDs per chart (e.g., ``areaFill<slide_number>``)
+29. **Missing .tw-pending CSS** — warns when ``twTypewrite`` is present in the
+   deck's ``<script>`` block and a ``.code-block`` element exists in any slide,
+   but the ``.tw-pending`` CSS rule is absent (suggests the old broken
+   ``scrollHeight`` pattern may be in use)
 
 Usage::
 
@@ -253,6 +257,9 @@ JS_CLOSE_PANEL_RE = re.compile(r'function\s+closeNotesPanel\s*\(')
 JS_KEY_N_RE = re.compile(r"""['"]N['"]\s*:.*?openNotesWindow|case\s+['"]N['"]\s*[:\n].*?openNotesWindow""", re.DOTALL)
 JS_KEY_B_RE = re.compile(r"""['"]B['"]\s*:.*?[Pp]anel|case\s+['"]B['"]\s*[:\n].*?[Pp]anel""", re.DOTALL)
 JS_TOGGLE_NOTES_RE = re.compile(r'\btoggleNotes\s*\(')
+TW_TYPEWRITE_RE = re.compile(r'\btwTypewrite\s*\(')
+TW_PENDING_RE = re.compile(r'\.tw-pending\b')
+CODE_BLOCK_RE = re.compile(r'class="[^"]*code-block')
 
 MAX_CONTEXT_ISSUES = 10
 MAX_REFS_PER_ISSUE = 2
@@ -353,7 +360,22 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
     numeric_ids = [int(m.group(1)) for m in SLIDE_RE.finditer(html)]
     if not all_slide_ids:
         fails.append("No slides found (expected <div class=\"slide\" id=\"sN\">)")
-        return passes, warns, fails
+        # 29. Missing .tw-pending CSS — soft-warn if twTypewrite used with code-block but .tw-pending absent
+    script_text_all = " ".join(SCRIPT_TAG_RE.findall(html))
+    style_text_all = " ".join(STYLE_TAG_RE.findall(html))
+    has_tw_typewrite = bool(TW_TYPEWRITE_RE.search(script_text_all))
+    has_code_block = bool(CODE_BLOCK_RE.search(html))
+    has_tw_pending_css = bool(TW_PENDING_RE.search(style_text_all))
+    if has_tw_typewrite and has_code_block and not has_tw_pending_css:
+        warns.append(
+            "twTypewrite used with .code-block but .tw-pending CSS rule is absent — "
+            "add '.tw-pending, .tw-pending span { color: transparent !important; }' "
+            "(old scrollHeight pattern may be in use; see Pattern 14 in css-animations.md)"
+        )
+    elif has_tw_typewrite and has_code_block:
+        passes.append(".tw-pending CSS present alongside twTypewrite and .code-block")
+
+    return passes, warns, fails
 
     if not numeric_ids and all_slide_ids:
         warns.append("Slide IDs: no numeric slide IDs found (e.g. s1, s2) — sequential check skipped")

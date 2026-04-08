@@ -188,6 +188,8 @@ Character-by-character reveal that preserves syntax-highlight `<span>` coloring.
   margin-left: 1px;
 }
 @media (prefers-reduced-motion: reduce) { .tw-cursor { animation: none; } }
+.tw-pending,
+.tw-pending span { color: transparent !important; }
 ```
 
 **Required JS** — add once per deck, before the closing `</body>`:
@@ -220,18 +222,36 @@ function twTypewrite(el, html, speed = 6) {
 
 **Wiring up a code block:**
 ```javascript
-const cb = document.getElementById('my-code-block');
-const SOURCE = cb.innerHTML;         // store the pre-rendered HTML with spans
-cb.style.height = cb.scrollHeight + 'px';  // lock height before clearing
-cb.innerHTML = '';
-twTypewrite(cb, SOURCE);             // start on slide enter (or setTimeout)
+// Store the pre-rendered HTML (with syntax spans) at page init
+const SOURCE = document.getElementById('my-code-block').innerHTML;
+
+// On slide ENTER
+function enterCodeSlide(cb) {
+  cb.classList.add('tw-pending');
+  setTimeout(() => {
+    const h = cb.offsetHeight;
+    cb.style.height = h + 'px';
+    cb.classList.remove('tw-pending');
+    cb.innerHTML = '';
+    twTypewrite(cb, SOURCE, 4);
+  }, 650);
+}
+
+// On slide LEAVE
+function leaveCodeSlide(cb) {
+  cb.style.height = '';
+  cb.classList.remove('tw-pending');
+  cb.innerHTML = SOURCE;
+}
 ```
 
 Key rules:
-- Store `innerHTML` *before* calling `cb.innerHTML = ''` — that HTML is the source string.
-- Lock `height` via `scrollHeight` measurement *before* clearing so the slide layout never reflows during animation.
+- Store `innerHTML` at page init (before any `show()` call) — not inside the slide-enter handler, or it captures an empty string after first visit.
+- Use `.tw-pending` (transparent text) to hold the full-sized container during the delay, not `scrollHeight` — `scrollHeight` is unreliable for off-screen slides.
+- Lock `height` with `offsetHeight` inside the `setTimeout` callback, after the slide has been active for ≥ 600 ms. This is the only point where the measurement is guaranteed accurate.
+- Release `height` and restore `innerHTML` on slide leave so replay works cleanly.
 - Add `white-space: pre-wrap` on `.code-block` (required regardless of animation).
-- For `prefers-reduced-motion`: skip the call to `twTypewrite` and leave `cb.innerHTML = SOURCE` intact.
+- For `prefers-reduced-motion`: skip `twTypewrite`, leave `cb.innerHTML = SOURCE`.
 
 ## Rules
 
