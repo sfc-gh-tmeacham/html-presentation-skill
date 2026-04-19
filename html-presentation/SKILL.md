@@ -470,7 +470,7 @@ python scripts/run_script.py generate_shell.py \
 ```
 
 The script:
-- Reads `references/shell_template.html` as its source
+- Reads `templates/shell_template.html` as its source
 - Substitutes `{{TITLE}}`, `{{ACCENT}}`, `{{SLIDE_COUNT}}`
 - Strips or keeps the speaker-notes CSS/HTML/JS blocks based on `--no-notes`
 - Runs 4 built-in checks (INSERT_SLIDE_1 marker, total counter, counter div, accent color) and exits non-zero on any failure

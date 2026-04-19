@@ -5,7 +5,7 @@
 """
 generate_shell.py — generate the HTML shell for a presentation deck.
 
-Reads references/shell_template.html, substitutes the three dynamic values
+Reads templates/shell_template.html, substitutes the three dynamic values
 (title, accent color, slide count), optionally strips speaker-notes sections,
 then writes the output file with INSERT_SLIDE_1 ready for Phase 2 insertion.
 
@@ -29,7 +29,7 @@ import re
 import sys
 from pathlib import Path
 
-TEMPLATE_PATH = Path(__file__).parent.parent / "references" / "shell_template.html"
+TEMPLATE_PATH = Path(__file__).parent.parent / "templates" / "shell_template.html"
 
 # Matches all three comment styles used for conditional sections in the template:
 #   CSS blocks:  /* BEGIN_NAME */ ... /* END_NAME */
@@ -124,7 +124,7 @@ def validate_shell(html: str, slide_count: int, accent: str) -> list[tuple[str, 
     if "<!-- INSERT_SLIDE_1 -->" not in html:
         failures.append((
             "INSERT_SLIDE_1 marker is missing from the rendered output",
-            "This is a template corruption issue — verify references/shell_template.html "
+            "This is a template corruption issue — verify templates/shell_template.html "
             "contains '<!-- INSERT_SLIDE_1 -->' inside <div id='deck'>.",
         ))
 
@@ -132,7 +132,7 @@ def validate_shell(html: str, slide_count: int, accent: str) -> list[tuple[str, 
     if not total_match:
         failures.append((
             "<span id='total'> element is missing from the rendered output",
-            "This is a template corruption issue — verify references/shell_template.html "
+            "This is a template corruption issue — verify templates/shell_template.html "
             "contains <span id='total'>{{SLIDE_COUNT}}</span> in the nav block.",
         ))
     elif int(total_match.group(1)) != slide_count:
@@ -146,7 +146,7 @@ def validate_shell(html: str, slide_count: int, accent: str) -> list[tuple[str, 
     if '<div class="counter">' not in html:
         failures.append((
             "<div class='counter'> marker is missing — generate_qr_appendix.py requires it",
-            "This is a template corruption issue — verify references/shell_template.html "
+            "This is a template corruption issue — verify templates/shell_template.html "
             "contains <div class='counter'></div> immediately before <div id='nav'>.",
         ))
 
@@ -206,7 +206,7 @@ def main() -> int:
         return _fail(
             f"Shell template not found at {TEMPLATE_PATH}",
             "Confirm the script is being run from the html-presentation/ skill root "
-            "via run_script.py and that references/shell_template.html exists.",
+            "via run_script.py and that templates/shell_template.html exists.",
         )
 
     try:
@@ -214,13 +214,13 @@ def main() -> int:
     except OSError as exc:
         return _fail(
             f"Could not read template at {TEMPLATE_PATH}: {exc}",
-            "Check file permissions on references/shell_template.html.",
+            "Check file permissions on templates/shell_template.html.",
         )
 
     if not template.strip():
         return _fail(
             f"Template file at {TEMPLATE_PATH} is empty",
-            "Restore references/shell_template.html from the git repository.",
+            "Restore templates/shell_template.html from the git repository.",
         )
 
     # --- Rendering -----------------------------------------------------------
@@ -240,7 +240,7 @@ def main() -> int:
         return _fail(
             f"Template contains unresolved placeholders after substitution: "
             f"{', '.join(still_unreplaced)}",
-            "Update references/shell_template.html to use only the supported "
+            "Update templates/shell_template.html to use only the supported "
             "placeholders: {{TITLE}}, {{ACCENT}}, {{SLIDE_COUNT}}.",
         )
 
