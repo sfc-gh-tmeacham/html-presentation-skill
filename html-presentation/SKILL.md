@@ -456,39 +456,38 @@ Generate a single self-contained HTML file following the Slide Structure, HTML O
 
 Always build the deck in three phases: shell → batched slide insertion → embed. The file is saved after every single slide — the worst-case of any interruption is losing one slide in progress.
 
-#### Phase 1 — Write the shell (subagent):
+#### Phase 1 — Generate the shell (script):
 
-Launch a `general-purpose` subagent (**readonly: false**) to write the complete HTML shell. Before launching, read all 5 reference files with the `read` tool in the main context and embed their contents directly in the subagent prompt. Do not rely on the subagent to read files independently.
+Run `generate_shell.py` via `run_script.py`. This is a deterministic script — no subagent, no LLM tokens, completes in under a second. Read the slide count and settings from the approved plan and config before running.
 
-The subagent prompt must include:
-- The approved slide plan (from `-plan.md`) — so it knows the total slide count and deck structure
-- The config (from `-config.yaml`) — accent color, speaker notes on/off, exec_mode, etc.
-- All 5 reference file contents inline (especially `presentation-runtime.md` — the shell's CSS, nav HTML, and JS come from here)
-- The working directory path (the skill root where `scripts/` is located)
-- Instructions to write the complete HTML structure: `<!DOCTYPE>`, `<head>`, all CSS (including accent color as `--accent`), opening `<div id="deck">`, the `<div class="counter"></div>` marker, nav HTML, and `<script>` — with only a single placeholder inside the deck div:
-  ```html
-  <div id="deck">
-  <!-- INSERT_SLIDE_1 -->
-  </div><!-- end #deck -->
-  ```
-- The shell MUST contain exactly ONE marker: `<!-- INSERT_SLIDE_1 -->`. Do NOT pre-populate markers for all slides. Phase 2 adds subsequent markers one at a time as slides are inserted.
-- The `<span id="total">` counter MUST reflect the **final** slide count from the approved plan from the start
-- Save the file to: `[folder]/[topic-slug]-[audience-slug]-slides.html`
+```bash
+python scripts/run_script.py generate_shell.py \
+  --title "[Deck Title]" \
+  --accent "[accent_color from config]" \
+  --slides [N] \
+  --output [folder]/[topic-slug]-[audience-slug]-slides.html \
+  [--no-notes]   # omit if speaker_notes: true in config
+```
 
-The subagent returns: "Shell saved to [path]. Total slide count: N." If the subagent's return message does not contain the slide count or the file path, do not proceed — relaunch the shell subagent.
+The script:
+- Reads `references/shell_template.html` as its source
+- Substitutes `{{TITLE}}`, `{{ACCENT}}`, `{{SLIDE_COUNT}}`
+- Strips or keeps the speaker-notes CSS/HTML/JS blocks based on `--no-notes`
+- Runs 4 built-in checks (INSERT_SLIDE_1 marker, total counter, counter div, accent color) and exits non-zero on any failure
+- Prints: `Shell saved to [path]. Total slide count: N.`
 
-After the shell subagent returns, update `manifest.json` with `html: {status: "shell_complete", "last_slide": 0}`. Then inform the user: "Shell saved — building slides now."
+If the script exits non-zero, read the error output and fix the arguments — do NOT fall back to a subagent. Common errors: wrong output path, missing `--accent` value, slide count mismatch.
+
+After the script succeeds, update `manifest.json` with `html: {status: "shell_complete", "last_slide": 0}`. Then inform the user: "Shell saved — building slides now."
 
 ### Step 3.5: Shell Verification
 
-After the shell subagent returns, verify the shell before proceeding to Phase 2:
+After `generate_shell.py` succeeds, the 4 built-in checks have already passed. Do a quick confirmation in the main context before proceeding to Phase 2:
 
-1. Search the HTML file for `<!-- INSERT_SLIDE_1 -->` — confirm the marker exists
-2. Confirm `<span id="total">` matches the expected slide count from the plan
-3. Confirm `<div class="counter">` is present (required by `generate_qr_appendix.py`)
-4. Confirm the accent color `--accent` matches the config
+1. Confirm the output file exists at the expected path
+2. Confirm the script's printed slide count matches the approved plan
 
-If any check fails, relaunch the shell subagent with a corrected prompt. If all checks pass, proceed immediately to Phase 2.
+If either check fails, re-run the script with corrected arguments. If both pass, proceed immediately to Phase 2.
 
 #### Phase 2 — One subagent per slide (Step 3, continued):
 

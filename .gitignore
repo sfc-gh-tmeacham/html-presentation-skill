@@ -42,8 +42,9 @@ logs/
 # OS
 Thumbs.db
 
-# Generated HTML decks
+# Generated HTML decks (exclude source templates in references/)
 *.html
+!html-presentation/references/*.html
 
 # Local agent instructions
 AGENTS.md

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <style>
+    :root {
+      --accent: {{ACCENT}};
+      --bg: #0a0a0a;
+      --text: #ffffff;
+      --secondary: #a0a0a0;
+      --card: #1a1a1a;
+      --border: #2a2a2a;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+    #deck { position: relative; width: 100vw; height: 100vh; transition: height 0.3s ease; }
+    .slide {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      transition: opacity 0.5s ease;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      padding: clamp(1.65rem, 4.4vh, 3.85rem) clamp(1.65rem, 5.5vw, 4.4rem);
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide-inner { width: 100%; max-width: min(1320px, 95vw); }
+    .slide-inner h2 {
+      font-size: clamp(2.75rem, 4.4vw, 4.4rem);
+      font-weight: 700; line-height: 1.1; margin-bottom: 1rem;
+    }
+    .slide-inner h3 {
+      font-size: clamp(0.935rem, 1.32vw, 1.1rem);
+      font-weight: 600; text-transform: uppercase;
+      letter-spacing: 2px; color: var(--accent); margin-bottom: 0.75rem;
+    }
+    .slide-inner p, .slide-inner li {
+      font-size: clamp(1.1rem, 1.76vw, 1.65rem); line-height: 1.6; color: var(--secondary);
+    }
+    .slide-inner ul, .slide-inner ol { list-style: none; padding: 0; }
+    .speaker-notes { display: none; }
+    a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--accent); transition: color 0.2s; }
+    a:hover { color: var(--accent); }
+    @media (prefers-reduced-motion: reduce) {
+      .slide { transition: none; }
+      #deck { transition: none; }
+    }
+    #nav {
+      position: fixed; bottom: clamp(12px, 2vh, 24px); right: clamp(16px, 2vw, 28px);
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(26, 26, 26, 0.9); border: 1px solid var(--border);
+      border-radius: 999px; padding: 8px 18px;
+      font-size: 0.85rem; color: var(--secondary);
+      backdrop-filter: blur(8px); z-index: 100;
+    }
+    .nbtn { cursor: pointer; color: var(--text); font-size: 1rem; padding: 0 4px; transition: color 0.2s; user-select: none; }
+    .nbtn:hover { color: var(--accent); }
+    #notes-hint { font-size: 0.72rem; color: #555; margin-left: 4px; }
+    /* BEGIN_NOTES_CSS */
+    #deck.panel-open { height: calc(100vh - 180px); }
+    #notes-panel {
+      position: fixed; bottom: 0; left: 0; width: 100%; height: 180px;
+      background: #111; border-top: 2px solid var(--accent);
+      display: none; flex-direction: column; z-index: 99;
+    }
+    #notes-panel.open { display: flex; }
+    #notes-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 20px 6px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    #notes-panel-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.8px; color: var(--accent); font-weight: 600; }
+    #notes-panel-slide { font-size: 0.7rem; color: #555; letter-spacing: 1px; }
+    #notes-panel-close { font-size: 0.7rem; color: #555; cursor: pointer; letter-spacing: 1px; transition: color 0.2s; }
+    #notes-panel-close:hover { color: #aaa; }
+    #notes-panel-body { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    #notes-panel-text { font-size: 1rem; line-height: 1.65; color: #d0d0d0; }
+    body.panel-open #nav { bottom: calc(180px + clamp(12px, 2vh, 24px)); }
+    /* END_NOTES_CSS */
+  </style>
+</head>
+<body>
+  <div id="deck">
+  <!-- INSERT_SLIDE_1 -->
+  </div><!-- end #deck -->
+  <div class="counter"></div>
+  <div id="nav">
+    <span class="nbtn" id="prev">&#8592;</span>
+    <span><span id="curr">1</span> / <span id="total">{{SLIDE_COUNT}}</span></span>
+    <span class="nbtn" id="next">&#8594;</span>
+    <span id="notes-hint">N = notes window &nbsp;&bull;&nbsp; B = notes panel</span>
+  </div>
+  <!-- BEGIN_NOTES_HTML -->
+  <div id="notes-panel">
+    <div id="notes-panel-header">
+      <span id="notes-panel-label">Speaker Notes</span>
+      <span id="notes-panel-slide"></span>
+      <span id="notes-panel-close">B = close</span>
+    </div>
+    <div id="notes-panel-body">
+      <div id="notes-panel-text"></div>
+    </div>
+  </div>
+  <!-- END_NOTES_HTML -->
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    let current = 0;
+    // BEGIN_NOTES_JS
+    let notesWin = null;
+    let panelOpen = false;
+
+    function updateNotesWindow() {
+      if (!notesWin || notesWin.closed) return;
+      const notes = slides[current].querySelector('.speaker-notes');
+      const text = notes ? notes.textContent : '';
+      notesWin.document.getElementById('noteText').textContent = text;
+      notesWin.document.getElementById('noteSlide').textContent =
+        'Slide ' + (current + 1) + ' of ' + slides.length;
+    }
+
+    function updateNotesPanel() {
+      if (!panelOpen) return;
+      const notes = slides[current].querySelector('.speaker-notes');
+      const text = notes ? notes.textContent.trim() : '(no notes)';
+      document.getElementById('notes-panel-text').textContent = text;
+      document.getElementById('notes-panel-slide').textContent =
+        'Slide ' + (current + 1) + ' of ' + slides.length;
+    }
+
+    function openNotesPanel() {
+      if (notesWin && !notesWin.closed) { notesWin.close(); notesWin = null; }
+      panelOpen = true;
+      document.getElementById('notes-panel').classList.add('open');
+      document.getElementById('deck').classList.add('panel-open');
+      document.body.classList.add('panel-open');
+      updateNotesPanel();
+    }
+
+    function closeNotesPanel() {
+      panelOpen = false;
+      document.getElementById('notes-panel').classList.remove('open');
+      document.getElementById('deck').classList.remove('panel-open');
+      document.body.classList.remove('panel-open');
+    }
+
+    function openNotesWindow() {
+      if (panelOpen) closeNotesPanel();
+      if (notesWin && !notesWin.closed) { notesWin.focus(); return; }
+      notesWin = window.open('', 'speaker_notes',
+        'width=520,height=360,left=100,top=100');
+      notesWin.document.write(`<!DOCTYPE html><html><head>
+        <title>Speaker Notes</title><style>
+        body{background:#111;color:#e0e0e0;
+          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+          Helvetica,Arial,sans-serif;padding:28px 32px;margin:0;}
+        #noteSlide{font-size:13px;text-transform:uppercase;
+          letter-spacing:1.5px;color:var(--accent,#3B82F6);
+          margin-bottom:16px;font-weight:600;}
+        #noteText{font-size:20px;line-height:1.65;color:#d0d0d0;}
+        .hint{position:fixed;bottom:16px;right:20px;
+          font-size:12px;color:#555;}
+        </style></head><body>
+        <div id="noteSlide"></div>
+        <div id="noteText"></div>
+        <div class="hint">Navigate from main window</div>
+      </body></html>`);
+      notesWin.document.close();
+      updateNotesWindow();
+    }
+
+    document.getElementById('notes-panel-close').addEventListener('click', closeNotesPanel);
+    // END_NOTES_JS
+
+    function show(n) {
+      slides[current].classList.remove('active');
+      current = (n + slides.length) % slides.length;
+      slides[current].classList.add('active');
+      document.getElementById('curr').textContent = current + 1;
+      // BEGIN_SHOW_UPDATES
+      updateNotesWindow();
+      updateNotesPanel();
+      // END_SHOW_UPDATES
+    }
+
+    document.getElementById('prev').addEventListener('click', () => show(current - 1));
+    document.getElementById('next').addEventListener('click', () => show(current + 1));
+
+    document.addEventListener('keydown', e => {
+      switch(e.key) {
+        case 'ArrowRight': case 'ArrowDown': show(current+1); break;
+        case 'ArrowLeft':  case 'ArrowUp':   show(current-1); break;
+        // BEGIN_NOTES_KEYS
+        case 'n': case 'N': openNotesWindow(); break;
+        case 'b': case 'B': if(panelOpen) closeNotesPanel(); else openNotesPanel(); break;
+        // END_NOTES_KEYS
+      }
+    });
+    document.getElementById('total').textContent = slides.length;
+    show(0);
+  </script>
+</body>
+</html>
