@@ -1,4 +1,5 @@
 .snowflake/
+AGENTS.md
 
 # Cache directories
 __pycache__/
