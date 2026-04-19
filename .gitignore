@@ -44,3 +44,6 @@ Thumbs.db
 
 # Generated HTML decks
 *.html
+
+# Local agent instructions
+AGENTS.md

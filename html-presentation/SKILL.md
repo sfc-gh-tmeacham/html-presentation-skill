@@ -407,7 +407,7 @@ Generate a single self-contained HTML file. No external images or base64-encoded
 
 For spacing (padding, margin, gap) use `vh`/`vw` or `rem` instead of `px`. When setting a `px` value makes sense (e.g., icon size, border width, border-radius), keep it — but never for layout dimensions or font sizes.
 
-**Navigation:** Arrow keys to move slides, counter in bottom-right, click-to-advance. The nav block MUST be preceded by `<div class="counter"></div>` — required by `generate_qr_appendix.py` as its insertion point. Renders as a frosted-glass pill fixed to the bottom-right with accent-colored arrow buttons and a dimmed notes hint on the right.
+**Navigation:** Arrow keys to move slides, counter in bottom-right, click-to-advance. The nav block MUST be preceded by `<div class="counter"></div>` — required by `generate_qr_appendix.py` as its insertion point. Renders as a frosted-glass pill fixed to the bottom-right with accent-colored arrow buttons and a dimmed notes hint on the right. The JS initialization block MUST include `document.getElementById('total').textContent = slides.length;` immediately before `show(0)` — this self-corrects the counter at runtime if slides are added or removed after the initial build.
 
 **Slide Transitions:** Fade crossfade using `opacity` + `pointer-events`. Never toggle `display: none / display: flex` — this breaks CSS transitions.
 
@@ -560,7 +560,7 @@ For all image/graphics technical details, see `references/graphics-embedding.md`
 **Slide ID and numbering rules:**
 - Every slide (including Agenda and Presenter) MUST have a sequential `id="sN"` attribute starting from `s1` for the title slide.
 - The Agenda slide and Presenter slide are real slides in the HTML with their own IDs, even though they don't count toward the content slide plan.
-- The `<span id="total">` counter in the navigation MUST equal the actual number of slide divs in the HTML.
+- The `<span id="total">` counter in the navigation MUST equal the actual number of slide divs in the HTML. **Additionally**, the JS initialization MUST include `document.getElementById('total').textContent = slides.length;` before `show(0)` — this self-corrects at runtime and is enforced by `validate_deck.py` Check #2.
 - When adding or removing slides after initial generation, ALL subsequent slide IDs must be renumbered to stay sequential and the total must be updated. **Always renumber in reverse order** (highest ID first, working down) to avoid double-replacement bugs. Use `scripts/insert_presenter.py` via `run_script.py` to automate post-build presenter slide injection (it handles resize, base64, insertion, renumbering, and total update in one step).
 
 ---

@@ -157,6 +157,10 @@ GRADIENT_ID_RE = re.compile(
     r'<linearGradient\b([^>]*)>',
     re.IGNORECASE,
 )
+JS_TOTAL_INIT_RE = re.compile(
+    r"getElementById\(['\"]total['\"]\)\.textContent\s*=\s*slides\.length",
+    re.IGNORECASE,
+)
 
 ICON_BLOCKLIST: dict[str, str] = {
     "monitoring": "query_stats, analytics, or trending_up",
@@ -392,15 +396,50 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
 
     # 2. Total counter — <span id="total"> matches actual slide count
     total_slide_count = len(numeric_ids)
+    script_text = " ".join(SCRIPT_TAG_RE.findall(html))
+    has_dynamic_total = bool(JS_TOTAL_INIT_RE.search(script_text))
     total_match = TOTAL_RE.search(html)
+
     if total_match:
         declared = int(total_match.group(1))
         if declared == total_slide_count:
-            passes.append(f"Total counter: {declared} matches actual slide count")
+            if has_dynamic_total:
+                passes.append(
+                    f"Total counter: {declared} matches actual slide count "
+                    f"(static + dynamic init present)"
+                )
+            else:
+                warns.append(
+                    f"Total counter: {declared} matches actual slide count but "
+                    f"dynamic init missing — add "
+                    f"document.getElementById('total').textContent = slides.length; "
+                    f"before show(0)"
+                )
         else:
-            fails.append(f"Total counter says {declared} but there are {total_slide_count} slides")
+            if has_dynamic_total:
+                warns.append(
+                    f"Total counter static value says {declared} but there are "
+                    f"{total_slide_count} slides — JS dynamic init will self-correct at "
+                    f"runtime, but update the static value to match for validator accuracy"
+                )
+            else:
+                fails.append(
+                    f"Total counter says {declared} but there are {total_slide_count} "
+                    f"slides — update <span id=\"total\"> and add dynamic init: "
+                    f"document.getElementById('total').textContent = slides.length;"
+                )
     else:
-        warns.append("No <span id=\"total\"> found — slide counter may be missing")
+        if has_dynamic_total:
+            warns.append(
+                "No <span id=\"total\"> found — add the span even with dynamic init "
+                "so the counter is visible before JS runs"
+            )
+        else:
+            fails.append(
+                "No <span id=\"total\"> found and no dynamic init — "
+                "add <span id=\"total\">N</span> and "
+                "document.getElementById('total').textContent = slides.length;"
+            )
 
     # 3. Orphan placeholders — leftover {{IMG:...}} tokens not yet embedded
     placeholder_matches = list(PLACEHOLDER_RE.finditer(html))

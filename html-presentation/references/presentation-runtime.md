@@ -208,4 +208,6 @@ document.addEventListener('keydown', e => {
     case 'b': case 'B': if(panelOpen) closeNotesPanel(); else openNotesPanel(); break;
   }
 });
+document.getElementById('total').textContent = slides.length;
+show(0);
 ```
