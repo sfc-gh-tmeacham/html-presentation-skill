@@ -1,1 +1,11 @@
 .snowflake/
+
+# Cache directories
+__pycache__/
+.venv/
+*.py[cod]
+.cache/
+.uv/
+
+# macOS
+.DS_Store
