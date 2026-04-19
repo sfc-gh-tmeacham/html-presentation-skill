@@ -1,6 +1,6 @@
 ---
 name: html-presentation
-description: "Generate beautiful self-contained HTML presentations with rich visual components. Use when: html presentation, html slides, html deck, html slide deck, self-contained presentation. Do NOT use for PowerPoint, Google Slides, or PPTX requests."
+description: "Generate beautiful self-contained HTML presentations with rich visual components. Can also export finished decks to PowerPoint (.pptx). Use when: html presentation, html slides, html deck, html slide deck, self-contained presentation, export to PowerPoint, export to pptx, save as pptx."
 ---
 
 # HTML Presentation
@@ -19,7 +19,8 @@ description: "Generate beautiful self-contained HTML presentations with rich vis
 | Transitions | Opacity + pointer-events only, never `display:none` |
 | SVG min height | `max-height >= 58vh` on containers |
 | Scripts | Always via `scripts/run_script.py <script.py> [args]` from the skill root (`html-presentation/`). Confirm `scripts/` exists before building. |
-| Steps | 0 (resume) → 1 (gather) → Research → 1.5 (verify brief) → 2 (plan) → 3 (build) → 3.5 (shell verify) → 4 (preview) → 5 (validate) → 6 (iterate) |
+| PPTX export | `scripts/run_script.py export_to_pptx.py <deck.html>` — see `references/export-to-pptx.md` |
+| Steps | 0 (resume) → 1 (gather) → Research → 1.5 (verify brief) → 2 (plan) → 3 (build) → 3.5 (shell verify) → 4 (preview) → 5 (validate) → 6 (iterate) → 7 (export, optional) |
 
 ---
 
@@ -630,3 +631,32 @@ Ask: "Please take a moment to carefully review the full presentation. Let me kno
 - **Change accent color**: Global find-replace the old hex value with the new one across the entire file. Check that SVG fills and stroke colors using the accent are also updated.
 - **Add/remove an external link**: Re-run `generate_qr_appendix.py` — it is idempotent and will rebuild the QR appendix to match the current link set.
 - **Any structural change**: Re-run `validate_deck.py --context 5` before presenting the updated deck.
+
+---
+
+### Step 7: Export to PowerPoint (optional)
+
+Offer this step proactively once the deck is validated and iteration is complete, or immediately if the user asks to "export to PowerPoint", "save as .pptx", "I need a PowerPoint version", or similar.
+
+> "Would you like a PowerPoint version of this deck? I can export it as a `.pptx` file with speaker notes included."
+
+**Prerequisites (one-time per machine):** Playwright's Chromium browser must be downloaded before first use. If the user has run this export before on this machine, skip this step:
+
+```bash
+uv run python -m playwright install chromium
+```
+
+**Export command:**
+
+```bash
+python scripts/run_script.py export_to_pptx.py <deck.html>
+```
+
+Output is saved to the same folder as the HTML with a `.pptx` extension.
+
+**Tell the user:**
+- Slides are exported as high-resolution screenshots — text and shapes are images, not editable in PowerPoint.
+- Speaker notes are preserved in the PowerPoint notes pane.
+- The file opens in PowerPoint, Keynote, or Google Slides (File > Import).
+
+For full details, prerequisites, and error troubleshooting see `references/export-to-pptx.md`.

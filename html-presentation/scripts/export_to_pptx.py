@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#   "beautifulsoup4>=4.12",
+#   "Pillow>=9.0",
+#   "playwright>=1.40",
+#   "python-pptx>=0.6",
+# ]
+# ///
 """Export an html-presentation-skill deck to PowerPoint (.pptx) with speaker notes.
 
 Usage:
