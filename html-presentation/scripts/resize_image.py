@@ -111,6 +111,21 @@ def validate_output(output_path: Path) -> None:
 
 @contextlib.contextmanager
 def _atomic_write(output_path: str) -> Generator[str, None, None]:
+    """Context manager for atomic file writes via a sibling temp file.
+
+    Yields the path to a temporary file in the same directory as
+    ``output_path``.  On normal exit the temp file atomically replaces the
+    target; on any exception it is cleaned up.
+
+    Args:
+        output_path: Destination path that the temp file will replace.
+
+    Yields:
+        str: Path to the writable temporary file.
+
+    Raises:
+        OSError: If the temp file cannot be created or the replace fails.
+    """
     tmp_fd, tmp_path = None, None
     try:
         tmp_fd, tmp_path = tempfile.mkstemp(
@@ -230,6 +245,17 @@ def resize_image(input_path: Path, output_path: Path, max_size: int = 800) -> No
 
 
 def positive_int(value: str) -> int:
+    """Argparse type validator that accepts only positive integers.
+
+    Args:
+        value: Raw string value from the command line.
+
+    Returns:
+        int: The parsed positive integer.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not an integer or is <= 0.
+    """
     try:
         ivalue = int(value)
     except ValueError:

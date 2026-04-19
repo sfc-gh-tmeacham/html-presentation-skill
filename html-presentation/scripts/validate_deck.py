@@ -270,12 +270,29 @@ MAX_REFS_PER_ISSUE = 2
 
 
 def line_no(html: str, pos: int) -> int:
-    """Return the 1-based line number for a character position in html."""
+    """Return the 1-based line number for a character position in html.
+
+    Args:
+        html: The full HTML string.
+        pos: Character offset within html.
+
+    Returns:
+        int: 1-based line number containing pos.
+    """
     return html[:pos].count('\n') + 1
 
 
 def slide_at(pos: int, slide_map: list[tuple[str, int, int]]) -> str:
-    """Return the slide ID that contains the given character position."""
+    """Return the slide ID that contains the given character position.
+
+    Args:
+        pos: Character offset within the HTML string.
+        slide_map: List of (slide_id, start, end) tuples from SLIDE_BLOCK_RE.
+
+    Returns:
+        str: The slide ID (e.g. ``"s3"``) containing pos, or ``"global"``
+            if pos falls outside all slide blocks.
+    """
     for sid, start, end in slide_map:
         if start <= pos < end:
             return sid
@@ -283,7 +300,16 @@ def slide_at(pos: int, slide_map: list[tuple[str, int, int]]) -> str:
 
 
 def context_snippet(html_lines: list[str], line_num: int, n: int) -> str:
-    """Return ±n lines around line_num (1-based) with base64 content redacted."""
+    """Return ±n lines around line_num (1-based) with base64 content redacted.
+
+    Args:
+        html_lines: The HTML file split into lines (no trailing newlines needed).
+        line_num: 1-based line number to centre the snippet on.
+        n: Number of context lines to show on each side.
+
+    Returns:
+        str: A multi-line string with an arrow (``→``) pointing at line_num.
+    """
     start = max(0, line_num - n - 1)
     end = min(len(html_lines), line_num + n)
     out = []
@@ -301,6 +327,14 @@ def context_snippet(html_lines: list[str], line_num: int, n: int) -> str:
 
 
 def strip_html(text: str) -> str:
+    """Remove HTML tags, speaker-notes, tables, style, and script blocks from text.
+
+    Args:
+        text: Raw HTML snippet.
+
+    Returns:
+        str: Plain text with tags and structural blocks removed.
+    """
     text = NOTES_BLOCK_RE.sub("", text)
     text = TABLE_BLOCK_RE.sub("", text)
     text = STYLE_TAG_RE.sub("", text)
@@ -311,14 +345,38 @@ def strip_html(text: str) -> str:
 
 
 def count_visible_words(html_block: str) -> int:
+    """Count visible words in an HTML block after stripping all tags.
+
+    Args:
+        html_block: HTML content of a single slide block.
+
+    Returns:
+        int: Number of whitespace-separated tokens in the visible text.
+    """
     return len(strip_html(html_block).split())
 
 
 def has_visual(html_block: str) -> bool:
+    """Return True if the slide block contains at least one visual component.
+
+    Args:
+        html_block: HTML content of a single slide block.
+
+    Returns:
+        bool: True if any pattern in VISUAL_PATTERNS matches.
+    """
     return any(pat.search(html_block) for pat in VISUAL_PATTERNS)
 
 
 def _svg_max_bottom(svg_body: str) -> float:
+    """Return the maximum bottom edge (y + height) of all <rect> elements.
+
+    Args:
+        svg_body: Inner content of an SVG element (between <svg> tags).
+
+    Returns:
+        float: Largest (y + height) value found, or 0.0 if no valid rects.
+    """
     max_b = 0.0
     for r in SVG_RECT_ELEM_RE.finditer(svg_body):
         a = r.group(1)
@@ -330,6 +388,19 @@ def _svg_max_bottom(svg_body: str) -> float:
 
 
 def _svg_float(attrs: str, name: str, default: float = 0.0) -> float:
+    """Parse a named numeric attribute from an SVG element attribute string.
+
+    Handles both XML attribute syntax (``name="value"``) and CSS inline-style
+    syntax (``name: value``).
+
+    Args:
+        attrs: Raw attribute string from an SVG element.
+        name: Attribute or property name to extract (e.g. ``"x"``, ``"height"``).
+        default: Value to return if the attribute is absent or unparseable.
+
+    Returns:
+        float: Parsed numeric value, or default.
+    """
     escaped = re.escape(name)
     m = re.search(r'\b' + escaped + r'\s*=\s*["\']?\s*([-0-9.]+)', attrs, re.IGNORECASE)
     if m:
@@ -341,12 +412,38 @@ def _svg_float(attrs: str, name: str, default: float = 0.0) -> float:
 
 
 def _svg_text_longest_line(inner: str) -> str:
+    """Return the longest text chunk inside a <text> element's inner HTML.
+
+    Splits on HTML tags, strips whitespace, and returns the longest remaining
+    fragment — used to estimate worst-case text width for overflow checks.
+
+    Args:
+        inner: Raw inner content between ``<text>`` and ``</text>``.
+
+    Returns:
+        str: The longest text fragment, or an empty string if none found.
+    """
     chunks = re.split(r'<[^>]+>', inner)
     chunks = [c.strip() for c in chunks if c.strip()]
     return max(chunks, key=len) if chunks else ''
 
 
 def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
+    """Run all validation checks against a slide deck HTML file.
+
+    Args:
+        html_path: Path to the HTML deck file to validate.
+
+    Returns:
+        tuple[list[str], list[str], list[str]]: A 3-tuple of
+            (passes, warnings, failures) where each element is a list of
+            human-readable message strings.
+
+    Raises:
+        FileNotFoundError: If html_path does not exist.
+        UnicodeDecodeError: If the file is not valid UTF-8.
+        OSError: If the file cannot be read.
+    """
     passes: list[str] = []
     warns: list[str] = []
     fails: list[str] = []
@@ -1125,6 +1222,11 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
 
 
 def main() -> int:
+    """Parse arguments, run validation, and print the structured report.
+
+    Returns:
+        int: 0 if all checks passed (warnings are allowed), 1 if any check failed.
+    """
     parser = argparse.ArgumentParser(
         description="Validate a slide deck HTML file against the HTML Presentation skill rules."
     )

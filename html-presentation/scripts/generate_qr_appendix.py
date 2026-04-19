@@ -214,10 +214,16 @@ def make_qr_svg(url: str) -> str | None:
     QR codes use black modules on a white background for maximum
     scan-ability regardless of the surrounding slide theme.
 
-    Segno outputs ``width`` / ``height`` but no ``viewBox``, so the
-    SVG can't scale.  We extract the native dimensions, add a
-    ``viewBox``, then replace width/height with 100% so the code
+    Extracts native width/height from the segno output, adds a ``viewBox``
+    attribute, then sets ``width`` and ``height`` to ``100%`` so the code
     fills whatever container it's placed in.
+
+    Args:
+        url: The URL to encode into the QR code.
+
+    Returns:
+        str | None: Inline SVG string ready for HTML embedding, or ``None``
+            if the URL is too long (>2953 bytes) or QR generation fails.
     """
     if len(url.encode()) > 2953:
         print(
@@ -267,8 +273,15 @@ def build_appendix_slide(
 ) -> tuple[str, int] | None:
     """Build the full HTML for one appendix slide (max QR_PER_SLIDE links).
 
-    Returns a ``(slide_html, card_count)`` tuple, or ``None`` if every QR code
-    in this chunk failed to generate.
+    Args:
+        links: List of (url, title) pairs to render as QR code cards.
+        slide_num: The ``id="sN"`` number to assign to this slide.
+        page_label: Optional pagination label appended to the heading
+            (e.g. ``" (1/2)"`` when multiple pages are needed).
+
+    Returns:
+        tuple[str, int] | None: A (slide_html, card_count) tuple, or
+            ``None`` if every QR code in this chunk failed to generate.
     """
     cards: list[str] = []
     for url, title in links:
@@ -338,7 +351,14 @@ def remove_existing_appendix(html: str) -> tuple[str, int]:
 
 
 def find_last_slide_num(html: str) -> int:
-    """Return the highest numeric slide ID found in the deck."""
+    """Return the highest numeric slide ID found in the deck.
+
+    Args:
+        html: The full deck HTML string.
+
+    Returns:
+        int: Highest ``sN`` slide number found, or 0 if no slide IDs exist.
+    """
     nums = [int(m.group(1)) for m in SLIDE_ID_RE.finditer(html)]
     if not nums and html.strip():
         print("Warning: no slide IDs found in non-empty deck.", file=sys.stderr)
@@ -346,7 +366,15 @@ def find_last_slide_num(html: str) -> int:
 
 
 def _fail(message: str, hint: str = "") -> int:
-    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1.
+
+    Args:
+        message: Short description of what failed.
+        hint: Actionable instruction telling the agent how to fix the problem.
+
+    Returns:
+        int: Always 1, so callers can write ``return _fail(...)``.
+    """
     print(f"ERROR: {message}", file=sys.stderr)
     if hint:
         print(f"HINT:  {hint}", file=sys.stderr)
@@ -354,6 +382,11 @@ def _fail(message: str, hint: str = "") -> int:
 
 
 def main() -> int:
+    """Parse arguments, extract links, generate QR codes, and append appendix slides.
+
+    Returns:
+        int: 0 on success, 1 on any error.
+    """
     parser = argparse.ArgumentParser(
         description="Append QR-code appendix slide(s) to an HTML presentation."
     )

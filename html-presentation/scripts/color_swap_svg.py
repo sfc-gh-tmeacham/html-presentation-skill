@@ -149,7 +149,7 @@ def normalize_color(c: str) -> list[str]:
         c: A CSS color value, e.g. ``"#000"``, ``"#000000"``, or ``"black"``.
 
     Returns:
-        A list of lowercased color strings that are all visually identical.
+        list[str]: A list of lowercased color strings that are all visually identical.
     """
     c = c.strip().lower()
     variants = [c]
@@ -216,7 +216,7 @@ def swap_colors(svg_content: str, from_color: str, to_color: str, from_variants:
             computed via ``normalize_color(from_color)``.
 
     Returns:
-        The modified SVG source with colors swapped.
+        str: The modified SVG source with colors swapped.
     """
     # Build the full set of equivalent representations for the source color.
     if from_variants is None:
@@ -270,7 +270,15 @@ def swap_colors(svg_content: str, from_color: str, to_color: str, from_variants:
 
 
 def _fail(message: str, hint: str = "") -> int:
-    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1.
+
+    Args:
+        message: Short description of what failed.
+        hint: Actionable instruction telling the agent how to fix the problem.
+
+    Returns:
+        int: Always 1, so callers can write ``return _fail(...)``.
+    """
     print(f"ERROR: {message}", file=sys.stderr)
     if hint:
         print(f"HINT:  {hint}", file=sys.stderr)

@@ -49,10 +49,31 @@ _HTML_HREF_RE = re.compile(r'href="(https?://[^"]+)"')
 
 
 def _skip(url: str) -> bool:
+    """Return True if the URL belongs to a CDN/API domain that should be skipped.
+
+    Args:
+        url: The URL string to check.
+
+    Returns:
+        bool: True if the URL matches a known skip domain, False otherwise.
+    """
     return any(domain in url for domain in _SKIP_DOMAINS)
 
 
 def extract_urls(text: str, mode: str) -> list[str]:
+    """Extract unique external URLs from the given text in document order.
+
+    In ``html`` mode only ``href`` attribute values are extracted; in
+    ``brief`` mode all bare ``https?://`` URLs are extracted.
+
+    Args:
+        text: Raw file content to scan for URLs.
+        mode: Extraction mode — ``"html"`` or ``"brief"``.
+
+    Returns:
+        list[str]: Sorted, deduplicated list of URLs with skip-domain entries
+            removed and trailing punctuation stripped.
+    """
     if mode == "html":
         raw = _HTML_HREF_RE.findall(text)
     else:
@@ -82,6 +103,21 @@ _BROWSER_HEADERS = {
 
 
 def check_url(url: str, timeout: int = 10) -> str:
+    """Attempt an HTTP HEAD (then GET) request and return the status as a string.
+
+    Uses browser-like headers to reduce bot-detection false positives.  Falls
+    back from HEAD to GET when the server returns 405.  Returns
+    ``"403-bot-blocked"`` rather than failing when a 403 is returned, because
+    many CDNs block bots with 403 even for valid pages.
+
+    Args:
+        url: The URL to check.
+        timeout: Maximum seconds to wait for a response.
+
+    Returns:
+        str: The HTTP status code as a string (e.g. ``"200"``),
+            ``"403-bot-blocked"``, or the exception message on network error.
+    """
     ctx = ssl.create_default_context()
     try:
         req = urllib.request.Request(url, headers=_BROWSER_HEADERS, method="HEAD")
@@ -111,6 +147,12 @@ def _fail(message: str, hint: str = "") -> int:
 
 
 def main() -> int:
+    """Parse arguments, extract URLs, check each one, and report results.
+
+    Returns:
+        int: 0 if all URLs resolved (or only bot-blocked), 1 if any failed,
+            2 on usage or file-not-found error.
+    """
     parser = argparse.ArgumentParser(
         description="Verify that every external URL in a file resolves."
     )

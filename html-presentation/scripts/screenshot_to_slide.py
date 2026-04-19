@@ -284,6 +284,18 @@ def to_base64(img: Image.Image) -> str:
 
 
 def _max_size_type(value: str) -> int:
+    """Argparse type validator: positive integer, max 8000.
+
+    Args:
+        value: Raw string value from the command line.
+
+    Returns:
+        int: Validated --max-size value.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not a positive integer
+            or exceeds 8000.
+    """
     v = int(value)
     if v <= 0:
         raise argparse.ArgumentTypeError("--max-size must be a positive integer.")
@@ -293,6 +305,17 @@ def _max_size_type(value: str) -> int:
 
 
 def _padding_type(value: str) -> int:
+    """Argparse type validator: non-negative integer, max 500.
+
+    Args:
+        value: Raw string value from the command line.
+
+    Returns:
+        int: Validated --padding value.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is negative or exceeds 500.
+    """
     v = int(value)
     if v < 0:
         raise argparse.ArgumentTypeError("--padding must be zero or a positive integer.")
@@ -302,6 +325,17 @@ def _padding_type(value: str) -> int:
 
 
 def _fuzz_type(value: str) -> int:
+    """Argparse type validator: integer between 0 and 255 inclusive.
+
+    Args:
+        value: Raw string value from the command line.
+
+    Returns:
+        int: Validated --fuzz value.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is outside the range 0–255.
+    """
     v = int(value)
     if not (0 <= v <= 255):
         raise argparse.ArgumentTypeError(f"--fuzz must be between 0 and 255, got {v}")

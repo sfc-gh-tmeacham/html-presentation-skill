@@ -61,7 +61,16 @@ _font_cache: dict = {}
 
 
 def _load_font(font_size: int, bold: bool = False):
-    """Return a PIL ImageFont for the given size, or None if unavailable."""
+    """Return a PIL ImageFont for the given size, or None if unavailable.
+
+    Args:
+        font_size: Desired font size in points.
+        bold: If True, prefer bold font paths before regular ones.
+
+    Returns:
+        PIL.ImageFont.FreeTypeFont | None: Loaded font, or None if no system
+            font path succeeded.
+    """
     if not _HAVE_PILLOW:
         return None
     key = (font_size, bold)
@@ -98,6 +107,14 @@ def estimate_text_width(text: str, font_size: int = 12, bold: bool = False) -> i
     Uses Pillow (PIL.ImageFont) with a system font when available for
     per-glyph accuracy.  Falls back to a per-character width table when no
     system font can be loaded.
+
+    Args:
+        text: The string to measure.
+        font_size: Font size in SVG/CSS units (approximately points).
+        bold: If True, estimate for bold text (uses bold font or 1.15× multiplier).
+
+    Returns:
+        int: Estimated width in pixels including a small safety buffer.
     """
     font = _load_font(font_size, bold=bold)
     if font is not None:
@@ -122,16 +139,19 @@ def _measurement_method() -> str:
 # stack
 # ---------------------------------------------------------------------------
 def cmd_stack(args):
-    """
-    Compute y positions for N vertically-stacked boxes of uniform height.
+    """Compute y positions for N vertically-stacked boxes of uniform height.
 
-    Options:
-      --count N        Number of boxes (required)
-      --box-height H   Height of each box in px (required)
-      --gap G          Gap between boxes in px (default 12)
-      --start-y Y      y of the first box (default 20)
-      --box-width W    Width of each box — used for overlap validation (optional)
-      --labels L       Comma-separated labels — validates each fits in W (optional)
+    Prints a table of y values, the required viewBox height, and optional
+    text-width warnings.  Pass ``--container-y`` to get the required
+    container rect height.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--count N``, ``--box-height H``, ``--gap G`` (default 12),
+            ``--start-y Y`` (default 20), ``--box-width W``,
+            ``--labels L`` (comma-separated), ``--font-size F``,
+            ``--bold``, ``--container-y C``.
     """
     p = argparse.ArgumentParser(prog="svg_calc.py stack")
     p.add_argument("--count",        "-n", type=int,   required=True)
@@ -200,13 +220,16 @@ def cmd_stack(args):
 # textbox
 # ---------------------------------------------------------------------------
 def cmd_textbox(args):
-    """
-    Estimate the minimum rect width for one or more text labels.
+    """Estimate the minimum rect width for one or more text labels.
 
-    Options:
-      --text T         Label string (required; repeat for multiple)
-      --font-size F    Font size in SVG units (default 12)
-      --padding P      Total horizontal padding in px (default 24)
+    Prints a table of estimated text widths and recommended minimum box
+    widths for each label at the specified font size.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--text T`` (repeatable, required), ``--font-size F`` (default 12),
+            ``--padding P`` (default 24), ``--bold``.
     """
     p = argparse.ArgumentParser(prog="svg_calc.py textbox")
     p.add_argument("--text",      "-t", type=str,  action="append", required=True)
@@ -235,14 +258,16 @@ def cmd_textbox(args):
 # distribute
 # ---------------------------------------------------------------------------
 def cmd_distribute(args):
-    """
-    Compute x centers and column width for N evenly-distributed columns.
+    """Compute x centers and column width for N evenly-distributed columns.
 
-    Options:
-      --width  W    viewBox width (required)
-      --margin M    Left AND right margin in px (default 30)
-      --count  N    Number of columns (required)
-      --gap    G    Gap between columns (default 16). When set, ignores equal spacing.
+    Prints left edges, center x values, and right edges for each column
+    given a viewBox width, margins, and optional column gap.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--width W`` (required), ``--margin M`` (default 30),
+            ``--count N`` (required), ``--gap G`` (optional).
     """
     p = argparse.ArgumentParser(prog="svg_calc.py distribute")
     p.add_argument("--width",  "-W", type=int, required=True)
@@ -281,12 +306,16 @@ def cmd_distribute(args):
 # viewbox
 # ---------------------------------------------------------------------------
 def cmd_viewbox(args):
-    """
-    Compute the required viewBox height given elements defined as y:height pairs.
+    """Compute the required viewBox height given elements defined as y:height pairs.
 
-    Options:
-      --elements E    Comma-separated "y:height" pairs, e.g. "20:48,84:48,148:60"
-      --margin M      Bottom margin to add (default 20)
+    Prints a table of elements and their bottom edges, then outputs the
+    recommended viewBox attribute string.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--elements E`` (comma-separated ``y:height`` pairs, required),
+            ``--width W`` (optional), ``--margin M`` (default 20).
     """
     p = argparse.ArgumentParser(prog="svg_calc.py viewbox")
     p.add_argument("--elements", "-e", type=str, required=True,
@@ -324,16 +353,18 @@ def cmd_viewbox(args):
 # arrow
 # ---------------------------------------------------------------------------
 def cmd_arrow(args):
-    """
-    Generate SVG path `d` attribute for a straight vertical connector arrow.
+    """Generate SVG path ``d`` attribute for a straight vertical connector arrow.
 
     The arrow starts at the bottom-center of the source box and ends at the
     top-center of the target box, with an optional arrowhead marker reference.
+    Prints both a straight path and a mid-point path plus a paste-ready
+    ``<line>`` element.
 
-    Options:
-      --cx X        Horizontal center x (shared for both boxes) (required)
-      --from-y Y    Bottom edge of the source box (required)
-      --to-y Y      Top edge of the target box (required)
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--cx X`` (required), ``--from-y Y`` (required),
+            ``--to-y Y`` (required).
     """
     p = argparse.ArgumentParser(prog="svg_calc.py arrow")
     p.add_argument("--cx",     "-x", type=float, required=True)
@@ -364,19 +395,19 @@ def cmd_arrow(args):
 # grid
 # ---------------------------------------------------------------------------
 def cmd_grid(args):
-    """
-    Generate a complete x/y coordinate table for a multi-column, multi-row SVG layout.
+    """Generate a complete x/y coordinate table for a multi-column, multi-row SVG layout.
 
-    Options:
-      --cols C          Number of columns (required)
-      --rows R          Number of rows (required)
-      --box-width W     Width of each box (required)
-      --box-height H    Height of each box (required)
-      --col-gap G       Horizontal gap between columns (default 24)
-      --row-gap G       Vertical gap between rows (default 16)
-      --margin-x M      Left/right margin (default 30)
-      --margin-y M      Top margin (default 20)
-      --viewbox-width V Total viewBox width (default: computed from cols)
+    Prints x, y, cx, cy, right, and bottom values for every cell in the grid
+    plus the recommended viewBox attribute string.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--cols C`` (required), ``--rows R`` (required),
+            ``--box-width W`` (required), ``--box-height H`` (required),
+            ``--col-gap G`` (default 24), ``--row-gap G`` (default 16),
+            ``--margin-x M`` (default 30), ``--margin-y M`` (default 20),
+            ``--viewbox-width V`` (optional).
     """
     p = argparse.ArgumentParser(prog="svg_calc.py grid")
     p.add_argument("--cols",          "-c", type=int, required=True)
@@ -420,28 +451,33 @@ def cmd_grid(args):
 # layout (JSON-driven)
 # ---------------------------------------------------------------------------
 def cmd_layout(args):
-    """
-    Full coordinate layout for a vertical flow diagram from a JSON spec.
+    """Full coordinate layout for a vertical flow diagram from a JSON spec.
 
-    JSON format (file or --inline):
-    {
-      "viewbox_width": 300,
-      "box_width": 220,
-      "box_height": 48,
-      "gap": 16,
-      "start_y": 20,
-      "font_size": 12,
-      "boxes": [
-        {"label": "ACCOUNT_USAGE"},
-        {"label": "Filter: last 30d", "sublabel": "WHERE ..."},
-        {"label": "GROUP BY warehouse_name"},
-        {"label": "Sum credits", "highlight": true}
-      ]
-    }
+    Reads a JSON spec (from a file or inline string) describing a list of
+    boxes, computes y positions and connector arrow coordinates, and prints
+    a paste-ready viewBox string and ``<line>`` elements.
 
-    Options:
-      --file F      Path to JSON spec file (required unless --inline)
-      --inline J    JSON string inline
+    JSON format::
+
+        {
+          "viewbox_width": 300,
+          "box_width": 220,
+          "box_height": 48,
+          "gap": 16,
+          "start_y": 20,
+          "font_size": 12,
+          "boxes": [
+            {"label": "ACCOUNT_USAGE"},
+            {"label": "Filter: last 30d", "sublabel": "WHERE ..."},
+            {"label": "GROUP BY warehouse_name"},
+            {"label": "Sum credits", "highlight": true}
+          ]
+        }
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--file F`` (path to JSON spec file) or ``--inline J`` (JSON string).
     """
     p = argparse.ArgumentParser(prog="svg_calc.py layout")
     p.add_argument("--file",   "-f", type=str, default=None)
@@ -511,7 +547,18 @@ def cmd_layout(args):
 # marker
 # ---------------------------------------------------------------------------
 def cmd_marker(args):
-    p = argparse.ArgumentParser(prog="svg_calc.py marker")
+    """Compute SVG marker dimensions for an arrowhead that fits a given gap.
+
+    Outputs ``markerWidth``, ``markerHeight``, ``refX``, and ``refY`` values
+    for ``markerUnits="userSpaceOnUse"`` and prints a paste-ready ``<marker>``
+    element.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--gap G`` (gap in px, required), ``--stroke-width S`` (default 2),
+            ``--ratio R`` (fraction of gap to occupy, default 0.7).
+    """
     p.add_argument("--gap",          "-g", type=float, required=True,
                    help="Gap in px between source bottom and target top")
     p.add_argument("--stroke-width", "-s", type=float, default=2.0,
@@ -554,7 +601,17 @@ def cmd_marker(args):
 # audit
 # ---------------------------------------------------------------------------
 def cmd_audit(args):
-    p = argparse.ArgumentParser(prog="svg_calc.py audit")
+    """Audit an existing SVG viewBox for wasted space and bad aspect ratio.
+
+    Checks top-gap, bottom-gap, and width-to-height aspect ratio against the
+    validate_deck.py thresholds and prints pass/fail for each.
+
+    Args:
+        args (list[str]): Raw command-line arguments forwarded from main().
+            Parsed internally by argparse with these flags:
+            ``--viewbox V`` (``"min-x min-y width height"`` string, required),
+            ``--elements E`` (comma-separated ``y:height`` pairs, required).
+    """
     p.add_argument("--viewbox", "-v", type=str, required=True,
                    help='viewBox value, e.g. "0 0 800 300"')
     p.add_argument("--elements", "-e", type=str, required=True,

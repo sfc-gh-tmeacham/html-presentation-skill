@@ -144,6 +144,13 @@ def _get_logo_inline() -> str:
     applied.
 
     The result is cached in-process after the first read.
+
+    Returns:
+        str: Complete inline SVG string ready to embed directly in HTML.
+
+    Raises:
+        FileNotFoundError: If snowflake-logo.svg is not found at the expected path.
+        ValueError: If the SVG does not contain exactly 16 <path> elements.
     """
     global _LOGO_INLINE
     if _LOGO_INLINE is not None:
@@ -172,6 +179,12 @@ def _sanitize_svg(text: str) -> str:
     Removes: XML/DOCTYPE declarations, HTML comments, ``<script>`` elements,
     ``on*`` event-handler attributes, and ``javascript:`` URI values.
     The resulting string is safe to inject directly into HTML.
+
+    Args:
+        text: Raw SVG source string from user input.
+
+    Returns:
+        str: Sanitized SVG string safe for inline HTML embedding.
     """
     text = _SVG_XML_DECL_RE.sub("", text)
     text = _SVG_DOCTYPE_RE.sub("", text)
@@ -188,6 +201,13 @@ def _inject_svg_style(svg_text: str, style: str) -> str:
     If a ``style`` attribute already exists on the root ``<svg>`` tag it is
     replaced; otherwise a new one is added.  Only the first ``<svg>`` tag is
     touched.
+
+    Args:
+        svg_text: SVG source string to modify.
+        style: CSS style string to inject (e.g. ``"max-height:60vh;width:100%"``).
+
+    Returns:
+        str: Modified SVG string with the style attribute set on the root element.
     """
     replacement = rf'\1 style="{style}"'
     result, n = _SVG_STYLE_ATTR_RE.subn(replacement, svg_text, count=1)
@@ -201,6 +221,12 @@ def _inject_svg_role_img(svg_text: str) -> str:
 
     If a role attribute already exists it is replaced; otherwise a new one
     is added.  Only the first ``<svg>`` tag is touched.
+
+    Args:
+        svg_text: SVG source string to modify.
+
+    Returns:
+        str: Modified SVG string with ``role="img"`` set on the root element.
     """
     result, n = _SVG_ROLE_ATTR_RE.subn(r'\1 role="img"', svg_text, count=1)
     if n == 0:
@@ -211,7 +237,13 @@ def _inject_svg_role_img(svg_text: str) -> str:
 def _inline_user_svg(file_path: Path, style: str | None) -> str:
     """Read, sanitize, and optionally restyle a user-provided SVG file.
 
-    Returns the SVG markup ready for direct inline embedding in HTML.
+    Args:
+        file_path: Filesystem path to the ``.svg`` file.
+        style: Optional CSS style string to inject onto the root ``<svg>``
+            element.  Pass ``None`` to skip style injection.
+
+    Returns:
+        str: SVG markup ready for direct inline embedding in HTML.
     """
     raw = file_path.read_text(encoding="utf-8")
     sanitized = _sanitize_svg(raw)
@@ -588,7 +620,15 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
 
 
 def _fail(message: str, hint: str = "") -> int:
-    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1.
+
+    Args:
+        message: Short description of what failed.
+        hint: Actionable instruction telling the agent how to fix the problem.
+
+    Returns:
+        int: Always 1, so callers can write ``return _fail(...)``.
+    """
     print(f"ERROR: {message}", file=sys.stderr)
     if hint:
         print(f"HINT:  {hint}", file=sys.stderr)
@@ -596,6 +636,11 @@ def _fail(message: str, hint: str = "") -> int:
 
 
 def main() -> int:
+    """Parse arguments, embed image placeholders, and write the modified deck.
+
+    Returns:
+        int: 0 on success, 1 if any placeholder failed to embed.
+    """
     parser = argparse.ArgumentParser(
         description="Replace {{IMG:...}} and {{SNOWFLAKE_LOGO}} placeholders in an HTML deck."
     )

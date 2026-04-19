@@ -1,3 +1,9 @@
+## Shell Safety Rule
+
+**NEVER use heredoc syntax** (`<<EOF`, `<<'EOF'`, `cat <<EOF`) or multi-line `python3 -c "..."` strings in bash. These cause the terminal to hang indefinitely. If you need to write content to a file, use the `write` tool first, then reference the file path in bash.
+
+---
+
 Validate and fix the HTML slide deck at: [folder]/[topic-slug]-[audience-slug]-slides.html
 Working directory: [skill-root]/ (the parent of the presentation folder, where `scripts/` is located).
 

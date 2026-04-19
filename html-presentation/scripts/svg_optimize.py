@@ -176,7 +176,19 @@ def optimize_svg(content: str) -> str:
 
 
 def _write_atomic(path: Path, content: str) -> None:
-    """Write *content* to *path* atomically using a sibling temp file."""
+    """Write *content* to *path* atomically using a sibling temp file.
+
+    Creates a temporary file in the same directory, writes the content, then
+    replaces the target with an atomic ``os.replace``.  Cleans up the temp
+    file on failure.
+
+    Args:
+        path: Destination filesystem path to write.
+        content: Text content to write with UTF-8 encoding.
+
+    Raises:
+        OSError: If the temporary file cannot be created or the replace fails.
+    """
     tmp_fd, tmp_path = tempfile.mkstemp(
         dir=path.parent, prefix=".svgopt_tmp_", suffix=".svg"
     )

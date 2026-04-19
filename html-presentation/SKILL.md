@@ -31,6 +31,8 @@ Instead, use the **Write tool** to create a temporary file first, then run the c
 1. Use the `write` tool to save content to a `.py`, `.sh`, `.json`, or other file (in `/tmp/` or the project folder)
 2. Run the command referencing that file path: `python3 /tmp/script.py`, `bash /tmp/setup.sh`, etc.
 
+**These rules apply to ALL subagents.** Any subagent that runs bash commands MUST receive these shell safety rules explicitly in its prompt — subagents do not inherit rules from SKILL.md.
+
 ---
 
 ## Workflow
@@ -505,7 +507,7 @@ Each slide is built by its own subagent. This gives every slide — especially t
    - The slide plan entry for THIS SLIDE ONLY (e.g., "Slide 5: Core — Architecture Diagram showing the data flow")
    - The full slide plan for narrative context (so the subagent understands what comes before and after)
    - All 5 reference file contents inline (or abbreviated as described above)
-   - The relevant SKILL.md sections inline: Slide Structure (Presenter, Agenda, BLUF rules), Content Rules, and HTML Output spec — required for any subagent building structural slides
+   - The relevant SKILL.md sections inline: Shell Safety Rules, Slide Structure (Presenter, Agenda, BLUF rules), Content Rules, and HTML Output spec — required for any subagent building structural slides
    - The HTML file path
    - The working directory path (the skill root where `scripts/` is located) — for running `svg_calc.py` and other scripts via bash
    - The config (from `-config.yaml`): `accent_color` (for `--accent` CSS variable), `speaker_notes` (whether to include `<div class="speaker-notes">`), `exec_mode` (action titles vs noun labels), `customer` (personalization references), `industry` (icon and example selection)
