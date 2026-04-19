@@ -110,18 +110,18 @@ def _run(cmd: list[str], check: bool = True, quiet: bool = False) -> subprocess.
                 if result.stderr:
                     print(result.stderr.decode(errors="replace"), file=sys.stderr, end="")
                 if check:
-                    print(f"Error: Command failed (exit {result.returncode}): {shlex.join(cmd)}", file=sys.stderr)
+                    print(f"ERROR: Command failed (exit {result.returncode}): {shlex.join(cmd)}", file=sys.stderr)
                     sys.exit(1)
             return result
         return subprocess.run(cmd, check=check, **kwargs)
     except FileNotFoundError:
         if check:
-            print(f"Error: Command not found: {cmd[0]}", file=sys.stderr)
+            print(f"ERROR: Command not found: {cmd[0]}", file=sys.stderr)
             sys.exit(1)
         return subprocess.CompletedProcess(cmd, returncode=127)
     # CalledProcessError only possible when check=True (non-quiet path)
     except subprocess.CalledProcessError as exc:
-        print(f"Error: Command failed (exit {exc.returncode}): {shlex.join(cmd)}", file=sys.stderr)
+        print(f"ERROR: Command failed (exit {exc.returncode}): {shlex.join(cmd)}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -207,7 +207,7 @@ def ensure_deps() -> None:
             stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError:
-        print(f"Error: venv Python not found or corrupted: {venv_python}", file=sys.stderr)
+        print(f"ERROR: venv Python not found or corrupted: {venv_python}", file=sys.stderr)
         print("Run with --reinstall to rebuild the virtual environment.", file=sys.stderr)
         sys.exit(1)
 
@@ -265,7 +265,7 @@ def resolve_target(script_name: str) -> Path:
             print(f"Warning: running script outside SCRIPT_DIR: {target}", file=sys.stderr)
         return target
 
-    print(f"Error: Script '{script_name}' not found in {SCRIPT_DIR}/", file=sys.stderr)
+    print(f"ERROR: Script '{script_name}' not found in {SCRIPT_DIR}/", file=sys.stderr)
     available = list_available_scripts()
     if available:
         print("Available scripts:", file=sys.stderr)
@@ -320,7 +320,7 @@ def main() -> None:
             try:
                 os.execv(uv, cmd)
             except OSError as exc:
-                print(f"Error: Could not execute 'uv': {exc}", file=sys.stderr)
+                print(f"ERROR: Could not execute 'uv': {exc}", file=sys.stderr)
                 sys.exit(1)
 
     # uv not available — fall back to shared local venv managed by this script.
@@ -344,7 +344,7 @@ def main() -> None:
         try:
             os.execv(venv_python, cmd)
         except OSError as exc:
-            print(f"Error: Could not execute '{venv_python}': {exc}", file=sys.stderr)
+            print(f"ERROR: Could not execute '{venv_python}': {exc}", file=sys.stderr)
             sys.exit(1)
 
 

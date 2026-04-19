@@ -62,6 +62,14 @@ class InsertPresenterError(Exception):
     pass
 
 
+def _fail(message: str, hint: str = "") -> int:
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    print(f"ERROR: {message}", file=sys.stderr)
+    if hint:
+        print(f"HINT:  {hint}", file=sys.stderr)
+    return 1
+
+
 HEADSHOT_SIZE_CSS = "clamp(100px,12vmin,160px)"
 HEADSHOT_ICON_CLAMP = "clamp(3rem,5vw,4.5rem)"
 HEADSHOT_SIZE_CSS_MULTI = "clamp(80px,10vmin,140px)"
@@ -347,20 +355,17 @@ def parse_presenters(args: list[str]) -> tuple[str, list[dict]]:
         A tuple of (deck_path, presenters_list).
 
     Raises:
-        SystemExit: On invalid arguments.
+        InsertPresenterError: On invalid arguments.
     """
     if not args or args[0].startswith("-"):
-        print(
+        raise InsertPresenterError(
             "Usage: insert_presenter.py <deck.html> "
-            "--name NAME --title TITLE [--photo FILE] [...]",
-            file=sys.stderr,
+            "--name NAME --title TITLE [--photo FILE] [...]"
         )
-        sys.exit(1)
 
     deck_path = args[0]
     if not Path(deck_path).is_file():
-        print(f"Error: Deck file not found: {deck_path}", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError(f"Deck file not found: {deck_path}")
 
     presenters = []
     current = {}
@@ -368,58 +373,58 @@ def parse_presenters(args: list[str]) -> tuple[str, list[dict]]:
     while i < len(args):
         arg = args[i]
         if arg in ("--name", "--title", "--photo") and i + 1 >= len(args):
-            print(f"Error: {arg} requires a value", file=sys.stderr)
-            sys.exit(1)
+            raise InsertPresenterError(f"{arg} requires a value")
         if arg == "--name":
             if current.get("name"):
                 presenters.append(current)
                 current = {}
             value = args[i + 1].strip()
             if not value:
-                print("Error: --name value cannot be empty", file=sys.stderr)
-                sys.exit(1)
+                raise InsertPresenterError("--name value cannot be empty")
             current["name"] = value
             i += 2
         elif arg == "--title":
             if "name" not in current:
-                print("Error: --title must follow --name", file=sys.stderr)
-                sys.exit(1)
+                raise InsertPresenterError("--title must follow --name")
             value = args[i + 1].strip()
             if not value:
-                print("Error: --title value cannot be empty", file=sys.stderr)
-                sys.exit(1)
+                raise InsertPresenterError("--title value cannot be empty")
             current["title"] = value
             i += 2
         elif arg == "--photo":
             current["photo"] = args[i + 1]
             i += 2
         else:
-            print(f"Error: Unknown argument: {arg}", file=sys.stderr)
-            sys.exit(1)
+            raise InsertPresenterError(f"Unknown argument: {arg}")
 
     if current.get("name"):
         presenters.append(current)
 
     if not presenters:
-        print("Error: At least one --name/--title pair is required.", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError("At least one --name/--title pair is required.")
 
     MAX_PRESENTERS = 9
     if len(presenters) > MAX_PRESENTERS:
-        print(f"Error: maximum {MAX_PRESENTERS} presenters supported, got {len(presenters)}", file=sys.stderr)
-        sys.exit(1)
+        raise InsertPresenterError(
+            f"Maximum {MAX_PRESENTERS} presenters supported, got {len(presenters)}"
+        )
 
     for p in presenters:
         if "title" not in p:
-            print(f"Error: Missing --title for presenter '{p['name']}'", file=sys.stderr)
-            sys.exit(1)
+            raise InsertPresenterError(f"Missing --title for presenter '{p['name']}'")
 
     return deck_path, presenters
 
 
-def main() -> None:
+def main() -> int:
     """Parse arguments, process images, build and insert the presenter slide."""
-    deck_path, presenters = parse_presenters(sys.argv[1:])
+    try:
+        deck_path, presenters = parse_presenters(sys.argv[1:])
+    except InsertPresenterError as exc:
+        return _fail(
+            str(exc),
+            "Usage: insert_presenter.py <deck.html> --name NAME --title TITLE [--photo FILE] [...]",
+        )
 
     try:
         for p in presenters:
@@ -436,8 +441,10 @@ def main() -> None:
             with open(deck_path, encoding="utf-8") as f:
                 html = f.read()
         except (OSError, UnicodeDecodeError) as exc:
-            print(f"Error: Cannot read '{deck_path}': {exc}", file=sys.stderr)
-            sys.exit(1)
+            return _fail(
+                f"Cannot read '{deck_path}': {exc}",
+                "Ensure the deck file exists and is valid UTF-8.",
+            )
 
         html = insert_slide(html, presenter_html)
 
@@ -452,7 +459,7 @@ def main() -> None:
             os.chmod(tmp_path, stat.S_IMODE(orig_mode))
             os.replace(tmp_path, deck_path)
             tmp_path = None
-        except Exception as exc:
+        except OSError as exc:
             if tmp_fd is not None:
                 try:
                     os.close(tmp_fd)
@@ -463,18 +470,21 @@ def main() -> None:
                     os.unlink(tmp_path)
                 except OSError:
                     pass
-            print(f"Error: Could not write '{deck_path}': {exc}", file=sys.stderr)
-            sys.exit(1)
+            return _fail(
+                f"Could not write '{deck_path}': {exc}",
+                "Check that the deck directory is writable.",
+            )
 
         names = ", ".join(p["name"] for p in presenters)
         total_val = find_total_span(html)
         total = str(total_val) if total_val is not None else "?"
-        print(f"Done — inserted presenter slide ({names}), {total} slides total.")
+        print(f"SUCCESS: Inserted presenter slide ({names}) | {total} slides total | deck: {deck_path}")
+        print(f"NEXT: Run validate_deck.py to verify the updated deck.")
+        return 0
 
     except InsertPresenterError as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        return _fail(str(exc))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

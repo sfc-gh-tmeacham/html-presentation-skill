@@ -64,29 +64,33 @@ def validate_input(input_path: Path) -> None:
             or exceeds the size limit.
     """
     if not input_path.exists():
-        print(f"Error: '{input_path}' not found.", file=sys.stderr)
+        print(f"ERROR: '{input_path}' not found.", file=sys.stderr)
         sys.exit(1)
 
     if not input_path.is_file():
-        print(f"Error: '{input_path}' is not a regular file.", file=sys.stderr)
+        print(f"ERROR: '{input_path}' is not a regular file.", file=sys.stderr)
         sys.exit(1)
 
     if input_path.suffix.lower() != ".svg":
         print(
-            f"Error: Expected an .svg file, got '{input_path.suffix}'.",
+            f"ERROR: Expected an .svg file, got '{input_path.suffix}'.",
+            file=sys.stderr,
+        )
+        print(
+            f"HINT:  Provide a valid .svg file path.",
             file=sys.stderr,
         )
         sys.exit(1)
 
     size = input_path.stat().st_size
     if size == 0:
-        print(f"Error: '{input_path}' is empty (0 bytes).", file=sys.stderr)
+        print(f"ERROR: '{input_path}' is empty (0 bytes).", file=sys.stderr)
         sys.exit(1)
 
     if size > MAX_SVG_SIZE_BYTES:
         mb = size / (1024 * 1024)
         print(
-            f"Error: '{input_path}' is {mb:.1f} MB — exceeds the "
+            f"ERROR: '{input_path}' is {mb:.1f} MB — exceeds the "
             f"{MAX_SVG_SIZE_BYTES // (1024 * 1024)} MB limit.",
             file=sys.stderr,
         )
@@ -122,7 +126,7 @@ def validate_color(color: str, label: str) -> None:
         if m:
             if all(0 <= int(v) <= 255 for v in m.groups()):
                 return  # valid
-            print(f"Error: rgb() channel values must be 0–255, got: {c!r}", file=sys.stderr)
+            print(f"ERROR: rgb() channel values must be 0–255, got: {c!r}", file=sys.stderr)
             sys.exit(1)
         return
 
@@ -265,7 +269,15 @@ def swap_colors(svg_content: str, from_color: str, to_color: str, from_variants:
     return svg_content
 
 
-def main() -> None:
+def _fail(message: str, hint: str = "") -> int:
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    print(f"ERROR: {message}", file=sys.stderr)
+    if hint:
+        print(f"HINT:  {hint}", file=sys.stderr)
+    return 1
+
+
+def main() -> int:
     """Parse CLI arguments, perform the color swap, and write or print the result."""
     parser = argparse.ArgumentParser(
         description="Swap colors in an SVG for dark-background compatibility."
@@ -304,24 +316,19 @@ def main() -> None:
     try:
         svg = p.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
-        print(
-            f"Error: '{p}' contains invalid UTF-8: {exc}.  "
-            f"SVG files must be valid UTF-8 or ASCII.",
-            file=sys.stderr,
+        return _fail(
+            f"'{p}' contains invalid UTF-8: {exc}.",
+            "SVG files must be valid UTF-8 or ASCII.",
         )
-        sys.exit(1)
     except OSError as exc:
-        print(f"Error: Could not read '{p}': {exc}", file=sys.stderr)
-        sys.exit(1)
+        return _fail(f"Could not read '{p}': {exc}")
 
     # Basic sanity check — make sure it's actually SVG.
     if "<svg" not in svg.lower():
-        print(
-            f"Error: '{p}' does not appear to contain SVG content "
-            f"(no <svg> tag found).",
-            file=sys.stderr,
+        return _fail(
+            f"'{p}' does not appear to contain SVG content (no <svg> tag found).",
+            "Ensure the input file is a valid SVG.",
         )
-        sys.exit(1)
 
     result = swap_colors(svg, args.from_color, args.to_color, from_variants=from_normalized)
 
@@ -340,11 +347,10 @@ def main() -> None:
 
         # Ensure the output directory exists.
         if not output_path.parent.exists():
-            print(
-                f"Error: Output directory '{output_path.parent}' does not exist.",
-                file=sys.stderr,
+            return _fail(
+                f"Output directory '{output_path.parent}' does not exist.",
+                f"Create the directory first: mkdir -p '{output_path.parent}'",
             )
-            sys.exit(1)
 
         tmp_fd, tmp_path = None, None
         try:
@@ -367,13 +373,13 @@ def main() -> None:
                     os.unlink(tmp_path)
                 except OSError:
                     pass
-            print(f"Error: Could not write to '{output_path}': {exc}", file=sys.stderr)
-            sys.exit(1)
+            return _fail(f"Could not write to '{output_path}': {exc}")
 
-        print(f"# Saved to {args.output}", file=sys.stderr)
+        print(f"SUCCESS: Color swap saved to {args.output}")
     else:
         print(result)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

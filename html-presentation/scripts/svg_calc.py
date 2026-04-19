@@ -637,15 +637,21 @@ Examples:
   python scripts/run_script.py svg_calc.py audit --viewbox "0 0 800 300" --elements "30:45,90:45,150:45,60:175,100:35,145:35,190:35"
 """
 
-if __name__ == "__main__":
+def main() -> int:
+    """Dispatch the requested svg_calc subcommand."""
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "help"):
         print(USAGE)
-        sys.exit(0)
+        return 0
 
     cmd = sys.argv[1].lower()
     if cmd not in COMMANDS:
-        print(f"Unknown command: '{cmd}'\n")
-        print(USAGE)
-        sys.exit(1)
+        print(f"ERROR: Unknown command: '{cmd}'\n", file=sys.stderr)
+        print(f"HINT:  Run 'svg_calc.py --help' to see available commands.", file=sys.stderr)
+        return 1
 
     COMMANDS[cmd](sys.argv[2:])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

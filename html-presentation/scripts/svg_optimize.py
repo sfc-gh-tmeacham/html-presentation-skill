@@ -192,7 +192,7 @@ def _write_atomic(path: Path, content: str) -> None:
         raise
 
 
-def main() -> None:
+def main() -> int:
     """Parse CLI arguments, optimize the SVG, and write or print the result."""
     parser = argparse.ArgumentParser(
         description="Optimize an SVG by stripping editor metadata and attributes."
@@ -208,34 +208,35 @@ def main() -> None:
     try:
         validate_input(input_path)
     except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     if args.output and Path(args.output).resolve() == input_path.resolve():
-        print("Error: input and output paths resolve to the same file.", file=sys.stderr)
-        sys.exit(1)
+        print("ERROR: input and output paths resolve to the same file.", file=sys.stderr)
+        print("HINT:  Provide a different output path or omit it to print to stdout.", file=sys.stderr)
+        return 1
 
     # Read the source SVG with explicit UTF-8 encoding.
     try:
         original = input_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         print(
-            f"Error: '{input_path}' contains invalid UTF-8: {exc}.  "
-            f"SVG files must be valid UTF-8 or ASCII.",
+            f"ERROR: '{input_path}' contains invalid UTF-8: {exc}.",
             file=sys.stderr,
         )
-        sys.exit(1)
+        print("HINT:  SVG files must be valid UTF-8 or ASCII.", file=sys.stderr)
+        return 1
     except OSError as exc:
-        print(f"Error: Could not read '{input_path}': {exc}", file=sys.stderr)
-        sys.exit(1)
+        print(f"ERROR: Could not read '{input_path}': {exc}", file=sys.stderr)
+        return 1
 
     orig_size = len(original.encode("utf-8"))
 
     try:
         validate_svg_content(original, input_path)
     except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     optimized = optimize_svg(original)
 
@@ -259,30 +260,29 @@ def main() -> None:
         # Ensure the output directory exists.
         if not output_path.parent.exists():
             print(
-                f"Error: Output directory '{output_path.parent}' does not exist.",
+                f"ERROR: Output directory '{output_path.parent}' does not exist.",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            print(f"HINT:  Create the directory first: mkdir -p '{output_path.parent}'", file=sys.stderr)
+            return 1
 
         try:
             _write_atomic(output_path, optimized)
         except OSError as exc:
-            print(f"Error: Could not write to '{output_path}': {exc}", file=sys.stderr)
-            sys.exit(1)
+            print(f"ERROR: Could not write to '{output_path}': {exc}", file=sys.stderr)
+            return 1
 
         print(
-            f"Optimized: {orig_size:,} → {opt_size:,} bytes "
-            f"({pct:.1f}% smaller) → {output_path}",
-            file=sys.stderr,
+            f"SUCCESS: {orig_size:,} → {opt_size:,} bytes ({pct:.1f}% smaller) — saved to {output_path}"
         )
     else:
-        # No output file — print diagnostics to stderr, SVG to stdout.
         print(
             f"# Optimized: {orig_size:,} → {opt_size:,} bytes ({pct:.1f}% smaller)",
             file=sys.stderr,
         )
         sys.stdout.write(optimized)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

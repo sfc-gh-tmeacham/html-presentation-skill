@@ -52,27 +52,27 @@ def validate_input(file_path: Path) -> None:
             or exceeds the size limit.
     """
     if not file_path.exists():
-        print(f"Error: '{file_path}' not found.", file=sys.stderr)
+        print(f"ERROR: '{file_path}' not found.", file=sys.stderr)
         sys.exit(1)
 
     if not file_path.is_file():
-        print(f"Error: '{file_path}' is not a regular file.", file=sys.stderr)
+        print(f"ERROR: '{file_path}' is not a regular file.", file=sys.stderr)
         sys.exit(1)
 
     size = file_path.stat().st_size
     if size == 0:
-        print(f"Error: '{file_path}' is empty (0 bytes).", file=sys.stderr)
+        print(f"ERROR: '{file_path}' is empty (0 bytes).", file=sys.stderr)
         sys.exit(1)
 
     # Note: TOCTOU — file may change between stat() and read_bytes()
     if size > MAX_FILE_SIZE_BYTES:
         mb = size / (1024 * 1024)
         print(
-            f"Error: '{file_path}' is {mb:.1f} MB — exceeds the "
-            f"{MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.  "
-            f"Resize the image first with resize_image.py.",
+            f"ERROR: '{file_path}' is {mb:.1f} MB — exceeds the "
+            f"{MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.",
             file=sys.stderr,
         )
+        print(f"HINT:  Resize the image first with resize_image.py.", file=sys.stderr)
         sys.exit(1)
 
 
@@ -120,20 +120,19 @@ def img_to_base64(file_path: Path) -> str:
     return f"data:{mime};base64,{encoded}"
 
 
-def main() -> None:
+def main() -> int:
     """Parse the single CLI argument and print the data URI to stdout."""
     if len(sys.argv) == 2 and sys.argv[1] in ("--help", "-h"):
         print("Usage: img_to_base64.py <image_file>")
         print("Convert an image file to a base64 data URI and print it to stdout.")
         print("  Supported formats: JPEG, PNG, GIF, BMP, TIFF, SVG, WebP, ICO")
         print("  Maximum file size: 20 MB")
-        sys.exit(0)
+        return 0
 
     if len(sys.argv) != 2:
-        print("Usage: img_to_base64.py <image_file>", file=sys.stderr)
-        print("  Supported formats: JPEG, PNG, GIF, BMP, TIFF, SVG, WebP, ICO", file=sys.stderr)
-        print("  Maximum file size: 20 MB", file=sys.stderr)
-        sys.exit(1)
+        print("ERROR: Expected exactly one argument: <image_file>", file=sys.stderr)
+        print("HINT:  Usage: img_to_base64.py <image_file>", file=sys.stderr)
+        return 1
 
     p = Path(sys.argv[1])
     validate_input(p)
@@ -141,11 +140,14 @@ def main() -> None:
     try:
         uri = img_to_base64(p)
     except (OSError, MemoryError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     print(uri)
+    print(f"# SUCCESS: {len(uri)} chars | file: {p.name}", file=sys.stderr)
+    print(f"# NEXT: Paste the URI into <img src=\"...\"> or use embed_image.py with {{{{IMG:{p.name}}}}}.", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -102,7 +102,15 @@ def check_url(url: str, timeout: int = 10) -> str:
         return str(exc)
 
 
-def main() -> None:
+def _fail(message: str, hint: str = "") -> int:
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    print(f"ERROR: {message}", file=sys.stderr)
+    if hint:
+        print(f"HINT:  {hint}", file=sys.stderr)
+    return 1
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Verify that every external URL in a file resolves."
     )
@@ -117,8 +125,10 @@ def main() -> None:
 
     path = Path(args.file)
     if not path.is_file():
-        print(f"Error: '{path}' not found or not a file.", file=sys.stderr)
-        sys.exit(2)
+        return _fail(
+            f"'{path}' not found or not a file.",
+            "Check the path and ensure the file exists.",
+        )
 
     mode = args.mode
     if mode == "auto":
@@ -127,13 +137,18 @@ def main() -> None:
     try:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        print(f"Error: '{path}' is not valid UTF-8.", file=sys.stderr)
-        sys.exit(2)
+        return _fail(
+            f"'{path}' is not valid UTF-8.",
+            "Re-save the file with UTF-8 encoding and try again.",
+        )
+    except OSError as exc:
+        return _fail(f"Could not read '{path}': {exc}")
 
     urls = extract_urls(text, mode)
     if not urls:
-        print(f"No external URLs found in '{path.name}' (mode: {mode}).")
-        sys.exit(0)
+        print(f"SUCCESS: No external URLs found in '{path.name}' (mode: {mode}) — nothing to check.")
+        print(f"NEXT: Run validate_deck.py to check the deck structure.")
+        return 0
 
     print(f"Checking {len(urls)} URL(s) in '{path.name}' (mode: {mode})...")
     failures: list[str] = []
@@ -151,13 +166,18 @@ def main() -> None:
 
     if bot_blocked:
         print(f"\n{len(bot_blocked)} URL(s) returned 403 (likely bot protection — not counted as failures).")
+
     if failures:
-        print(f"\n{len(failures)} URL(s) returned non-200 — fix or remove them before proceeding.")
-        sys.exit(1)
-    else:
-        print("\nAll URLs OK.")
-        sys.exit(0)
+        print(f"\nERROR: {len(failures)} URL(s) returned non-200 — fix or remove them before proceeding.", file=sys.stderr)
+        print(f"HINT:  Edit the deck, correct or remove the failing URLs, then re-run validate_urls.py.", file=sys.stderr)
+        return 1
+
+    ok = len(urls) - len(bot_blocked)
+    blocked_note = f" | {len(bot_blocked)} bot-blocked (verify manually)" if bot_blocked else ""
+    print(f"\nSUCCESS: {ok} URL(s) resolved OK{blocked_note} | file: {path.name}")
+    print(f"NEXT: Run validate_deck.py to check the deck structure.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

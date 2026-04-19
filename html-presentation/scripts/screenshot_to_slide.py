@@ -59,11 +59,11 @@ def validate_input(input_path: Path) -> None:
         SystemExit: If validation fails.
     """
     if not input_path.exists():
-        print(f"Error: '{input_path}' not found.", file=sys.stderr)
+        print(f"ERROR: '{input_path}' not found.", file=sys.stderr)
         sys.exit(1)
 
     if not input_path.is_file():
-        print(f"Error: '{input_path}' is not a regular file.", file=sys.stderr)
+        print(f"ERROR: '{input_path}' is not a regular file.", file=sys.stderr)
         sys.exit(1)
 
     ext = input_path.suffix.lower()
@@ -113,12 +113,12 @@ def safe_open_image(input_path: Path) -> Image.Image:
         )
         sys.exit(1)
     except (OSError, SyntaxError, Image.DecompressionBombError) as exc:
-        print(f"Error: Could not open '{input_path}': {exc}", file=sys.stderr)
+        print(f"ERROR: Could not open '{input_path}': {exc}", file=sys.stderr)
         sys.exit(1)
 
     w, h = img.size
     if w == 0 or h == 0:
-        print(f"Error: Image has invalid dimensions ({w}x{h}).", file=sys.stderr)
+        print(f"ERROR: Image has invalid dimensions ({w}x{h}).", file=sys.stderr)
         sys.exit(1)
 
     return img
@@ -279,7 +279,7 @@ def to_base64(img: Image.Image) -> str:
             encoded = base64.b64encode(buf.getvalue()).decode("ascii")
         return f"data:image/png;base64,{encoded}"
     except (OSError, MemoryError) as exc:
-        print(f"Error: Base64 encoding failed: {exc}", file=sys.stderr)
+        print(f"ERROR: Base64 encoding failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -308,7 +308,7 @@ def _fuzz_type(value: str) -> int:
     return v
 
 
-def main(argv=None) -> None:
+def main(argv=None) -> int:
     """Parse CLI arguments and run the crop → resize → encode pipeline."""
     parser = argparse.ArgumentParser(
         description="Crop, resize, and base64-encode a screenshot for slide embedding."
@@ -371,7 +371,6 @@ def main(argv=None) -> None:
     final_size = img.size
     uri = to_base64(img)
 
-    # Print size diagnostics to stderr so they don't pollute the URI output.
     print(f"# Original: {original_size[0]}x{original_size[1]}", file=sys.stderr)
     if not args.no_crop:
         print(f"# Cropped:  {cropped_size[0]}x{cropped_size[1]}", file=sys.stderr)
@@ -379,7 +378,10 @@ def main(argv=None) -> None:
         print("# Crop: skipped", file=sys.stderr)
     print(f"# Final:    {final_size[0]}x{final_size[1]}", file=sys.stderr)
     print(uri)
+    print(f"# SUCCESS: {len(uri)} chars | file: {p.name}", file=sys.stderr)
+    print(f"# NEXT: Use embed_image.py with {{{{IMG:{p.name}}}}} in the deck, then run validate_deck.py.", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

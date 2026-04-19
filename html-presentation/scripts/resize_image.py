@@ -55,11 +55,11 @@ def validate_input(input_path: Path) -> None:
         ValueError: If the path is not a file or has an unsupported extension.
     """
     if not input_path.exists():
-        print(f"Error: '{input_path}' not found.", file=sys.stderr)
+        print(f"ERROR: '{input_path}' not found.", file=sys.stderr)
         raise FileNotFoundError(f"'{input_path}' not found.")
 
     if not input_path.is_file():
-        print(f"Error: '{input_path}' is not a file.", file=sys.stderr)
+        print(f"ERROR: '{input_path}' is not a file.", file=sys.stderr)
         raise ValueError(f"'{input_path}' is not a file.")
 
     ext = input_path.suffix.lower()
@@ -99,7 +99,7 @@ def validate_output(output_path: Path) -> None:
         raise ValueError(f"'{parent}' is not a directory.")
 
     if not os.access(parent, os.W_OK):
-        print(f"Error: Output directory '{parent}' is not writable.", file=sys.stderr)
+        print(f"ERROR: Output directory '{parent}' is not writable.", file=sys.stderr)
         raise OSError(f"Output directory '{parent}' is not writable.")
 
     if output_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
@@ -205,7 +205,7 @@ def resize_image(input_path: Path, output_path: Path, max_size: int = 800) -> No
             except (OSError, shutil.Error) as exc:
                 print(f"Error: Could not copy to '{output_path}': {exc}", file=sys.stderr)
                 raise OSError(f"Could not copy to '{output_path}': {exc}") from exc
-            print(f"Image already within bounds ({w}x{h}). Saved as-is.")
+            print(f"SUCCESS: Image already within bounds ({w}x{h}) — copied as-is to {output_path}")
             return
 
         scale = max_size / longest
@@ -223,7 +223,7 @@ def resize_image(input_path: Path, output_path: Path, max_size: int = 800) -> No
             with _atomic_write(str(output_path)) as tmp_path:
                 with img.resize((new_w, new_h), Image.LANCZOS) as resized:
                     resized.save(tmp_path, **save_kwargs)
-                    print(f"Resized {w}x{h} → {new_w}x{new_h}  (saved to {output_path})")
+                    print(f"SUCCESS: Resized {w}x{h} → {new_w}x{new_h} — saved to {output_path}")
         except (OSError, ValueError) as exc:
             print(f"Error: Could not save to '{output_path}': {exc}", file=sys.stderr)
             raise OSError(f"Could not save to '{output_path}': {exc}") from exc
@@ -239,7 +239,7 @@ def positive_int(value: str) -> int:
     return ivalue
 
 
-def main() -> None:
+def main() -> int:
     """Parse CLI arguments and run the resize pipeline."""
     parser = argparse.ArgumentParser(
         description="Resize an image for slide-deck embedding."
@@ -262,8 +262,10 @@ def main() -> None:
         validate_output(output_path)
         resize_image(input_path, output_path, args.max_size)
     except (FileNotFoundError, ValueError, OSError):
-        sys.exit(1)
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

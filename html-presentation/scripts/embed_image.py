@@ -587,7 +587,15 @@ def process_html(html: str, default_max_size: int, base_dir: Path, dry_run: bool
     return result, count + logo_count + svg_inline_count + logo_inline_count, total_bytes, errors
 
 
-def main() -> None:
+def _fail(message: str, hint: str = "") -> int:
+    """Print a structured ERROR (and optional HINT) to stderr and return exit code 1."""
+    print(f"ERROR: {message}", file=sys.stderr)
+    if hint:
+        print(f"HINT:  {hint}", file=sys.stderr)
+    return 1
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Replace {{IMG:...}} and {{SNOWFLAKE_LOGO}} placeholders in an HTML deck."
     )
@@ -607,46 +615,54 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.max_size <= 0:
-        parser.error("--max-size must be a positive integer")
+        return _fail("--max-size must be a positive integer.")
 
     html_path = Path(args.html_file)
     if not html_path.is_file():
-        print(f"Error: '{html_path}' not found or not a file.", file=sys.stderr)
-        sys.exit(1)
+        return _fail(
+            f"'{html_path}' not found or not a file.",
+            "Check the file path and try again.",
+        )
 
     base_dir = Path(args.base_dir).expanduser().resolve() if args.base_dir else html_path.parent.resolve()
 
     if args.base_dir and not base_dir.is_dir():
-        print(f"Error: --base-dir '{base_dir}' is not a directory.", file=sys.stderr)
-        sys.exit(1)
+        return _fail(
+            f"--base-dir '{base_dir}' is not a directory.",
+            "Provide a valid directory path for --base-dir.",
+        )
 
     if args.max_size and Image is None:
-        print("Error: --max-size requires Pillow. Install with: pip install Pillow", file=sys.stderr)
-        sys.exit(1)
+        return _fail(
+            "--max-size requires Pillow.",
+            "Install it with: pip install Pillow, or invoke via run_script.py which auto-installs dependencies.",
+        )
 
     try:
         html = html_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        print(f"Error: '{html_path}' is not valid UTF-8.", file=sys.stderr)
-        sys.exit(1)
+        return _fail(
+            f"'{html_path}' is not valid UTF-8.",
+            "Re-save the file with UTF-8 encoding and try again.",
+        )
     except OSError as exc:
-        print(f"Error: Could not read '{html_path}': {exc}", file=sys.stderr)
-        sys.exit(1)
+        return _fail(f"Could not read '{html_path}': {exc}")
 
     html, count, total_bytes, errors = process_html(
         html, args.max_size, base_dir, dry_run=args.dry_run
     )
 
     if errors:
-        print("Errors:", file=sys.stderr)
+        print(f"ERROR: {len(errors)} placeholder(s) failed to embed:", file=sys.stderr)
         for err in errors:
             print(f"  {err}", file=sys.stderr)
+        print(f"HINT:  Check the file paths above and re-run embed_image.py.", file=sys.stderr)
 
     if args.dry_run:
         print(f"Dry run: {count} placeholder(s) would be replaced.")
         if errors:
             print(f"  {len(errors)} error(s) — see above.")
-        return
+        return 0
 
     if count > 0:
         tmp_fd, tmp_path = tempfile.mkstemp(
@@ -656,19 +672,25 @@ def main() -> None:
             with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
                 f.write(html)
             os.replace(tmp_path, html_path)
-        except Exception as exc:
+        except OSError as exc:
             try:
                 os.unlink(tmp_path)
             except OSError:
                 pass
-            print(f"Error: Could not write '{html_path}': {exc}", file=sys.stderr)
-            sys.exit(1)
+            return _fail(
+                f"Could not write '{html_path}': {exc}",
+                "Check that the deck directory is writable.",
+            )
 
     kb = total_bytes / 1024
-    print(f"Embedded {count} asset(s) ({kb:.1f} KB added to HTML).")
     if errors:
-        print(f"  {len(errors)} placeholder(s) had errors — left unchanged.")
+        print(f"SUCCESS: Embedded {count} asset(s) ({kb:.1f} KB added) | {len(errors)} placeholder(s) left unchanged | deck: {html_path.name}")
+        print(f"NEXT: Fix the failed placeholders listed above, then re-run embed_image.py.")
+        return 1
+    print(f"SUCCESS: Embedded {count} asset(s) ({kb:.1f} KB added to HTML) | deck: {html_path.name}")
+    print(f"NEXT: Run validate_deck.py to verify the final deck.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

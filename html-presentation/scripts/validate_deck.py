@@ -1124,7 +1124,7 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
     return passes, warns, fails
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate a slide deck HTML file against the HTML Presentation skill rules."
     )
@@ -1138,14 +1138,16 @@ def main() -> None:
 
     html_path = Path(args.html_file)
     if not html_path.is_file():
-        print(f"Error: '{html_path}' not found.", file=sys.stderr)
-        sys.exit(1)
+        print(f"ERROR: '{html_path}' not found.", file=sys.stderr)
+        print(f"HINT:  Check the file path and ensure the deck file exists.", file=sys.stderr)
+        return 1
 
     try:
         passes, warns, fails = validate(html_path)
     except (UnicodeDecodeError, OSError) as e:
-        print(f"Error reading '{html_path}': {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"ERROR: Could not read '{html_path}': {e}", file=sys.stderr)
+        print(f"HINT:  Ensure the file is readable and encoded as UTF-8.", file=sys.stderr)
+        return 1
 
     html_lines: list[str] = []
     if args.context > 0:
@@ -1184,8 +1186,16 @@ def main() -> None:
     total = len(passes) + len(warns) + len(fails)
     print(f"\n  {len(passes)}/{total} passed, {len(warns)} warnings, {len(fails)} failures")
 
-    sys.exit(1 if fails else 0)
+    if fails:
+        print(f"\nFAIL: {len(fails)} check(s) failed — see \u2717 items above for details.")
+        print(f"NEXT: Fix the failures listed above, then re-run validate_deck.py.")
+        return 1
+    if warns:
+        print(f"\nSUCCESS: All checks passed ({len(warns)} warning(s) — review \u26a0 items above).")
+    else:
+        print(f"\nSUCCESS: All {len(passes)} checks passed — deck is valid.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
