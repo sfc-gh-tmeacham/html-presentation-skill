@@ -48,7 +48,7 @@ To update the skill to the latest version:
 
 ## Why HTML?
 
-- **Minimal dependencies** — every deck is a single `.html` file with one external dependency: Google Material Icons (loaded from `fonts.googleapis.com`). An internet connection is required to display icons when presenting.
+- **Minimal dependencies** — every deck is a single `.html` file with one external dependency: Google Material Symbols (loaded from `fonts.googleapis.com`). An internet connection is required to display icons when presenting.
 - **Pixel-perfect on any device** — open it in any browser, on any OS, and it looks exactly the same.
 - **Version-control friendly** — it's just text. Diff it, commit it, review it.
 - **Fully customizable** — every pixel is CSS you can tweak after generation.
@@ -62,7 +62,7 @@ To update the skill to the latest version:
 - Speaker notes in a separate popup window (press `N`)
 - Keyboard navigation (arrow keys) with a slide counter
 - CSS animations that respect `prefers-reduced-motion`
-- Google Material Icons throughout
+- Google Material Symbols throughout
 - User-provided images (logos, screenshots, headshots) embedded as base64 — no external files
 - QR code appendix slide with scannable codes for every external link in the deck
 
