@@ -2,6 +2,17 @@
 
 Generate single self-contained HTML file. No external images or base64 inline. One external CDN permitted: Material Symbols Rounded (`fonts.googleapis.com/css2?family=Material+Symbols+Rounded&display=block`). All other assets self-contained.
 
+**Slide Structure:** Each slide MUST follow this exact structure:
+```html
+<div id="sN" class="slide">
+  <div class="slide-inner">
+    [content]
+  </div>
+  <!-- optional: <div class="speaker-notes">...</div> -->
+</div>
+```
+The `.slide-inner` wrapper is mandatory — it applies the standardized padding `clamp(1.65rem, 4.4vh, 3.85rem) clamp(1.65rem, 5.5vw, 4.4rem)` and `max-width: min(1320px, 95vw)`. Slides without it will display content flush to the slide edge or in wrong positions. Exception: title slides with `class="slide gradient-bg"` may place ambient glow orbs before `.slide-inner`.
+
 **Layout:** Fullscreen slides (100vw × 100vh), content centered, max-width `min(1320px, 95vw)`, padding `clamp(1.65rem, 4.4vh, 3.85rem) clamp(1.65rem, 5.5vw, 4.4rem)`. Fill viewport — don't waste space with large side margins.
 
 **Colors:** Background `#0a0a0a`, text `#ffffff`, secondary `#a0a0a0`, cards `#1a1a1a`, borders `#2a2a2a`, plus one accent per deck (see `references/accent-colors.md`).
@@ -32,6 +43,6 @@ When requested, store each slide's notes in hidden `<div class="speaker-notes">`
 
 Read `references/presentation-runtime.md` for complete nav HTML/CSS, slide transition CSS, speaker notes CSS/HTML/JS.
 
-**Visuals:** Use inline SVG for diagrams, flow arrows, progress rings. CSS gradients (radial, linear, conic) for decorative backgrounds. All visual elements self-contained — no external images. Material Icons remain primary icon system.
+**Visuals:** Use inline SVG for diagrams, flow arrows, progress rings. CSS gradients (radial, linear, conic) for decorative backgrounds. All visual elements self-contained — no external images. **Material Symbols Rounded** is the icon system — ALWAYS use `class="material-symbols-rounded"`. NEVER use `class="material-icons"` (legacy API; renders icon names as literal text instead of glyphs).
 
 **CSS Animations:** Read `references/css-animations.md` for approved patterns (fade-in, stagger, counter roll-up, progress ring, SVG draw, pulse) and rules including `prefers-reduced-motion`.

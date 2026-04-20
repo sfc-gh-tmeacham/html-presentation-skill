@@ -81,6 +81,16 @@ Checks performed:
    ``white-space: pre-wrap`` this renders as a visible blank line at the top
    of the code block; move the first ``<span>`` (or text node) to the same
    line as the opening tag
+32. **Wrong icon class** — fails when ``class="material-icons"`` is found
+   anywhere in slide content; must be ``material-symbols-rounded`` (the
+   legacy ``material-icons`` API renders icon names as literal text)
+33. **Missing slide-inner wrapper** — warns when a slide's first child div
+   is not ``class="slide-inner"`` (and is not ``gradient-bg``); content may
+   misalign without the standardized padding and max-width
+34. **Light-theme color override** — warns when slide content contains
+   hardcoded light background colors (``#fff``, ``white``, ``#f8fafc``, etc.)
+   or dark text colors (``#1e293b``, ``#0f172a``, ``#374151``, etc.) that
+   override the dark theme
 
 Usage::
 
@@ -143,6 +153,7 @@ VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r"radial-gradient",
     r"conic-gradient",
     r'class="[^"]*chart-[vh]',
+    r'class="[^"]*two-col',
 ]]
 
 SLIDE_RE = re.compile(
@@ -284,6 +295,23 @@ TW_TYPEWRITE_RE = re.compile(r'\btwTypewrite\s*\(')
 TW_PENDING_RE = re.compile(r'\.tw-pending\b')
 CODE_BLOCK_RE = re.compile(r'class="[^"]*code-block')
 FONT_SIZE_PX_RE = re.compile(r'font-size\s*:\s*\d+(?:\.\d+)?px')
+LEGACY_ICON_CLASS_RE = re.compile(r'class="[^"]*material-icons[^"]*"', re.IGNORECASE)
+SLIDE_INNER_RE = re.compile(
+    r'<div\b[^>]*class="[^"]*slide-inner[^"]*"',
+    re.IGNORECASE,
+)
+GRADIENT_BG_CLASS_RE = re.compile(
+    r'class="[^"]*gradient-bg[^"]*"',
+    re.IGNORECASE,
+)
+LIGHT_BG_RE = re.compile(
+    r'background\s*:\s*(?:#fff(?:fff)?|white|#f[89a-f][a-f0-9]{4,6})\b',
+    re.IGNORECASE,
+)
+DARK_TEXT_RE = re.compile(
+    r'color\s*:\s*#(?:0f172a|1e293b|374151|475569|64748b)\b',
+    re.IGNORECASE,
+)
 CB_LEADING_WS_RE = re.compile(
     r'<div[^>]+class="[^"]*code-block[^"]*"[^>]*>\s*\n',
     re.IGNORECASE
@@ -595,7 +623,16 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
                 over_30.append((sid, wc))
 
         if no_visual:
-            fails.append(f"Slides without visual component: {no_visual}")
+            details = []
+            for nv_sid in no_visual:
+                for sb_m in slide_blocks:
+                    if sb_m.group(2) == nv_sid:
+                        preview = sb_m.group(3).strip()[:200].replace('\n', ' ')
+                        details.append(f"{nv_sid} (first 200 chars: {preview})")
+                        break
+                else:
+                    details.append(nv_sid)
+            fails.append(f"Slides without visual component: {'; '.join(details)}")
         else:
             passes.append("All slides have a visual component")
 
@@ -938,7 +975,9 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
     if svg_topgaps:
         fails.append(
             f"{len(svg_topgaps)} SVG viewBox(es) with top gap > {SVG_GAP_THRESHOLD*100:.0f}%: "
-            f"{svg_topgaps[0]}"
+            f"{svg_topgaps[0]}  "
+            f"Fix: shift viewBox origin — e.g. viewBox=\"0 0 W H\" with first content at y=Y → "
+            f"change to viewBox=\"0 (Y-padding) W (H-Y+padding)\" to remove blank band"
             + (f"  (+{len(svg_topgaps) - 1} more)" if len(svg_topgaps) > 1 else "")
         )
     else:
@@ -1284,6 +1323,81 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         )
     else:
         passes.append("No code-block leading newlines found")
+
+    # 32. Wrong icon class — class="material-icons" renders text, not glyphs
+    legacy_icon_hits: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        slide_body = sb.group(3)
+        for m in LEGACY_ICON_CLASS_RE.finditer(slide_body):
+            pos = sb.start() + len(sb.group(1)) + m.start()
+            ln = line_no(html, pos)
+            legacy_icon_hits.append(
+                f"{sid} line {ln}: {m.group(0)} — must be "
+                f"\"material-symbols-rounded\" (old API renders text, not glyphs)"
+            )
+    if legacy_icon_hits:
+        fails.append(
+            f"{len(legacy_icon_hits)} legacy material-icons class(es) found: "
+            f"{legacy_icon_hits[0]}"
+            + (f"  (+{len(legacy_icon_hits) - 1} more)" if len(legacy_icon_hits) > 1 else "")
+        )
+    else:
+        passes.append("No legacy material-icons class usage found")
+
+    # 33. Missing slide-inner wrapper — slide's first child div should be .slide-inner
+    missing_inner: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        slide_tag = sb.group(1)
+        slide_body = sb.group(3)
+        if GRADIENT_BG_CLASS_RE.search(slide_tag):
+            continue
+        first_div_m = re.search(r'<div\b[^>]*>', slide_body, re.IGNORECASE)
+        if first_div_m:
+            if not SLIDE_INNER_RE.search(first_div_m.group(0)):
+                cls_m = re.search(r'class="([^"]*)"', first_div_m.group(0), re.IGNORECASE)
+                found_cls = cls_m.group(1) if cls_m else "(no class)"
+                pos = sb.start() + len(slide_tag) + first_div_m.start()
+                ln = line_no(html, pos)
+                missing_inner.append(
+                    f"{sid} line {ln}: direct child is class=\"{found_cls}\" — "
+                    f"must be \"slide-inner\" (content may misalign)"
+                )
+    if missing_inner:
+        warns.append(
+            f"{len(missing_inner)} slide(s) missing .slide-inner wrapper: "
+            f"{missing_inner[0]}"
+            + (f"  (+{len(missing_inner) - 1} more)" if len(missing_inner) > 1 else "")
+        )
+    else:
+        passes.append("All slides use .slide-inner wrapper (or gradient-bg)")
+
+    # 34. Light-theme color override — hardcoded light backgrounds / dark text inside slides
+    light_theme_hits: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        slide_body = sb.group(3)
+        for m in LIGHT_BG_RE.finditer(slide_body):
+            pos = sb.start() + len(sb.group(1)) + m.start()
+            ln = line_no(html, pos)
+            light_theme_hits.append(
+                f"{sid} line {ln}: '{m.group(0)}' — light background overrides dark theme"
+            )
+        for m in DARK_TEXT_RE.finditer(slide_body):
+            pos = sb.start() + len(sb.group(1)) + m.start()
+            ln = line_no(html, pos)
+            light_theme_hits.append(
+                f"{sid} line {ln}: '{m.group(0)}' — dark text color overrides dark theme"
+            )
+    if light_theme_hits:
+        warns.append(
+            f"{len(light_theme_hits)} light-theme color override(s) found: "
+            f"{light_theme_hits[0]}"
+            + (f"  (+{len(light_theme_hits) - 1} more)" if len(light_theme_hits) > 1 else "")
+        )
+    else:
+        passes.append("No light-theme color overrides detected in slides")
 
     return passes, warns, fails
 

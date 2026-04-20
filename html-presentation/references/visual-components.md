@@ -95,6 +95,8 @@ Use for: impressive data points, growth numbers, costs.
 Numbered steps with arrows between them.
 Use for: processes, tutorials, how-it-works.
 
+> **Validator:** The outer container MUST have `class="step-flow"` for Check #10. Omitting the class causes a "missing visual component" failure.
+
 ```html
 <div class="step-flow">
   <div class="card">
@@ -188,8 +190,12 @@ that height before clearing `innerHTML` and calling `twTypewrite`. Do **not** us
 Horizontal line with dots and labels above/below.
 Use for: history, roadmap, project phases.
 
+> **Validator:** The outer container MUST have `class="timeline"` for Check #10. Omitting the class causes a "missing visual component" failure even if the timeline structure is otherwise correct.
+
+**Shell class:** `.timeline` — pre-loaded (`position:relative; width:100%; padding:40px 0`). No CSS to add.
+
 ```html
-<div style="position:relative;width:100%;padding:40px 0;">
+<div class="timeline">
   <div style="position:absolute;top:50%;left:0;right:0;height:2px;background:var(--border);transform:translateY(-50%);"></div>
   <div style="display:flex;justify-content:space-between;position:relative;">
     <div style="text-align:center;">
@@ -255,6 +261,8 @@ Standard marker template:
 ```
 
 Replace `arrN` with a unique ID per SVG (convention: `arr` + slide number, e.g., `arr7` for slide 7). Run `svg_calc.py marker --gap <px>` to compute marker dimensions for non-standard gap sizes.
+
+**Never use inline icon SVGs** — standard icon paths (e.g. Material Icons SVG exports) use `viewBox="0 0 24 24"` with 3-unit insets that exceed the 12% gap threshold. Use `<span class="material-symbols-rounded">icon_name</span>` instead. If you must embed an icon as SVG, crop the viewBox to remove inset padding: e.g. for a path with content between y=3–21, use `viewBox="0 3 24 18"`.
 
 **SVG viewBox MUST be tight to content bounds** — the gap between the last content element's bottom edge and the viewBox bottom should not exceed 12% of the viewBox height. Excessive bottom padding causes the diagram to render smaller than necessary. After placing all elements, set viewBox height to `max_content_bottom + 20px`. Run `svg_calc.py viewbox --elements "y1:h1,y2:h2,..."` to compute the correct height.
 
@@ -377,6 +385,8 @@ Accent-color the header row bottom border. Alternate `rgba(255,255,255,0.03)` ro
 ## Two-Column Layout
 General-purpose split slide: content on the left, visual on the right (or vice versa).
 Use for: concept + diagram, list + screenshot, text + chart, any "explain and show" pairing.
+
+> **Validator:** The outer `class="two-col"` wrapper is required for Check #10. Omitting it causes a "missing visual component" failure even if the layout is otherwise correct.
 
 **Shell class:** `.two-col` — pre-loaded (`1fr 1fr`, 48px gap, vertically centered). Override `grid-template-columns` inline for asymmetric splits (e.g. `style="grid-template-columns:2fr 3fr"`).
 

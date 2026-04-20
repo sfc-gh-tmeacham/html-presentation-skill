@@ -27,16 +27,30 @@ Launch all BATCH_SIZE subagents **simultaneously** in a single message (multiple
 Each subagent prompt MUST include:
 
 - **Task** (exactly): "Generate the HTML for slide N only. Write the complete `<div id='sN' class='slide'>...</div>` block to `{deck_folder}/drafts/slide_N.html` using the `write` tool. Do NOT return the HTML as text. Do NOT edit the main deck file. Do NOT include any `<!-- INSERT_SLIDE_ -->` markers."
+- **Slide wrapper rule** (mandatory): "The direct child of `<div id='sN' class='slide'>` MUST be `<div class='slide-inner'>`. Never create a custom wrapper div or add `class='slide-content'`, custom padding, or background-color to the slide div itself. The `.slide-inner` class handles padding, centering, and max-width. Exception: title slides use `gradient-bg` class on the slide div and may place ambient glow orbs before `.slide-inner`."
+- **Dark theme rule** (mandatory): "This is a dark-background deck (`background:#0a0a0a`). NEVER hardcode light colors inside slides: `background:#fff`, `background:white`, `color:#1e293b`, `color:#475569`, `color:#374151`, `color:#64748b`. Use CSS variables ONLY: `var(--text)` for primary text, `var(--secondary)` for muted text, `var(--bg)` for background, `var(--border)` for borders, `var(--card)` for card/panel backgrounds, `var(--accent)` for highlights and emphasis. Card backgrounds inherit from the `.card` shell class — do not re-specify them."
+- **Icon system rule** (mandatory): "ALWAYS use `class=\"material-symbols-rounded\"` for icon spans. NEVER use `class=\"material-icons\"` — this is the legacy API and renders icon names as literal text, not glyphs. Font-size on icon spans must use `rem`, not `px`."
+- **No inline icon SVGs** (mandatory): "For decorative icons, always use `<span class=\"material-symbols-rounded\">` — never inline SVG icon paths. The SVG viewBox gap rule (12% max top/bottom) makes standard icon SVG paths (with `viewBox=\"0 0 24 24\"`) non-compliant by default."
+- **Font-size rule** (mandatory): "All `font-size` values MUST use `rem` or `clamp()` with rem — NEVER `px`. This includes icon spans, headings, body text, labels, and captions. `px` is only allowed for `border-width`, `border-radius`, and `letter-spacing`. The validator fails any `font-size` in px (Check #30)."
+- **Link attributes rule** (mandatory): "Every `<a>` tag MUST include `target=\"_blank\" rel=\"noopener\"`. The validator fails any external anchor missing either attribute (Check #13)."
+- **List alignment rule** (mandatory): "Every `<ul>` and `<ol>` MUST have `text-align:left` (inline style or via CSS class). Omitting it causes misalignment when the list lives inside a centered container. The validator warns on any list without it (Check #14)."
+- **No display toggling** (mandatory): "NEVER use `display:none` or `display:flex` to show/hide slides. Slide transitions use `opacity` + `pointer-events` only — toggling `display` breaks CSS fade transitions."
+- **Code-block newline rule** (mandatory): "When using `class=\"code-block\"`, the first content character or `<span>` MUST be on the same line as the closing `>` of the opening tag. A newline there renders as a visible blank line because the shell uses `white-space:pre-wrap` (Check #31)."
+- **Double-bullet rule** (mandatory): "When `<li>` items use a leading icon, emoji, or symbol, the parent `<ul>` MUST set `list-style:none;padding:0;` to suppress browser default bullets. The validator warns on any list with both icon/symbol content and default bullet styling (Check #11)."
 - **Canonical classes rule** (mandatory): "Use canonical CSS component classes for their container type — these classes are already defined in the shell CSS:
   - `.card-grid` — any grid of card elements (2–4 columns)
   - `.card` — individual card elements inside a grid
   - `.icon-list` — icon+label `<ul>` elements
   - `.code-block` — syntax-highlighted code blocks
   - `.step-flow` — step-with-arrows layouts
-  Use these classes instead of duplicating their properties as inline `style=` attributes. Inline styles are only for values that differ from the class defaults (e.g. a custom `grid-template-columns` ratio, a specific `border-left` color, overriding centered text alignment)."
+  - `.timeline` — timeline container (horizontal line with dots/labels)
+  - `.two-col` — two-column layouts (content left, visual right or vice versa)
+  - `.comparison-panel` — side-by-side comparison with divider
+  Use these classes instead of duplicating their properties as inline `style=` attributes. Inline styles are only for values that differ from the class defaults (e.g. a custom `grid-template-columns` ratio, a specific `border-left` color, overriding centered text alignment). If your slide's primary visual element uses any of these layouts, the outer container MUST have the corresponding class — otherwise the validator will report it as missing a visual component."
 - Slide plan entry for THIS SLIDE ONLY (e.g., `Slide 5: Core — Architecture Diagram showing the data flow`)
 - Full slide plan for narrative context
-- All 9 reference file contents inline (embed full text): `presentation-runtime.md` (most critical — copy exactly), `slide-structure.md`, `content-rules.md`, `html-output-spec.md`, `visual-components.md`, `slide-build-protocol.md`, `css-animations.md`, `accent-colors.md`, `graphics-embedding.md`. If combined content too large, abbreviate `css-animations.md` and `accent-colors.md` to first 50 lines.
+- **Reference bundle** (embed full text): `references/subagent-bundle.md` — condensed version of all 9 reference files (~79% smaller). Contains all HTML component templates, CSS animation patterns, SVG rules, typography specs, and embedding tokens. Use this instead of the 9 individual files to save context window space. If a subagent needs the full uncompressed version of a specific file (rare), pass that single file alongside the bundle.
+- **Icon reference** (embed full text): `references/material-icons.md` — curated icon name list by concept/industry and blacklist. Cannot be compressed (lookup table). Pass alongside the bundle.
 - Relevant SKILL.md sections inline: Shell Safety Rules, Presenter/Agenda/BLUF rules — required for structural slides
 - HTML file path (for reference only — subagent does NOT edit it)
 - Working directory path (skill root where `scripts/` lives) — for running `svg_calc.py`
@@ -121,6 +135,8 @@ Any non-200 URL MUST be replaced before proceeding. After fixing, re-run `genera
 python scripts/run_script.py subset_icons.py [folder]/[topic-slug]-[audience-slug]-slides.html
 ```
 This rewrites the Google Fonts `<link>` to request only the icons actually used in the deck (`&icon_names=...`), reducing the font from ~295 KB to ~2 KB. Run last so all icon spans are present.
+
+**Re-run after any icon class fix:** If the validation loop (Step 4/5) corrects any `material-icons` → `material-symbols-rounded` error, re-run `subset_icons.py` immediately before the next `validate_deck.py` call. Skipping this leaves the corrected icon names absent from the font URL subset — they will render as text despite having the correct class.
 
 For image/graphics technical details, see `references/graphics-embedding.md`.
 

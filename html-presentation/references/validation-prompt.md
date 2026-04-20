@@ -28,7 +28,13 @@ Step 2: For each reported issue, apply the fix using the Edit tool with the exac
   - SVG stacked rects: `y_N + height_N + 10 < y_(N+1)` (no overlapping, 10px min gap)
   - No `display:none` for slide transitions — use `opacity` + `pointer-events` only
   - Code blocks: first content must be on the same line as the `<div class="code-block">` opening tag — a leading newline renders as a visible blank line due to `white-space: pre-wrap`
+  - Icon class: NEVER use `class="material-icons"` — must be `class="material-symbols-rounded"` (legacy class renders text, not glyphs)
+  - Slide wrapper: direct child of `.slide` MUST be `.slide-inner` (unless slide uses `gradient-bg`)
+  - Dark theme: do not hardcode light backgrounds (`#fff`, `white`) or dark text colors (`#1e293b`, `#475569`, etc.) inside slides — use CSS variables
 
-Step 3: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
+Step 3: After fixing any icon class error (wrong class or missing icon), re-run `subset_icons.py <deck>` before the next validate run:
+  python scripts/run_script.py subset_icons.py [folder]/[topic-slug]-[audience-slug]-slides.html
+
+Step 4: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
 
 Return a one-line summary: "PASS — N slides, all checks clean" or "Fixed N issues: [brief list]". If validation still fails after 3 attempts, list the remaining errors.

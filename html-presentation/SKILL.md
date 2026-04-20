@@ -301,7 +301,7 @@ If user rejects or cannot confirm a fact, remove entirely — never leave unconf
 
 ### Step 2: Plan the Slide Deck
 
-Map each slide to visual component (see `references/visual-components.md`). Present plan:
+Map each slide to a visual component from the catalog listed in the Visual Components section above (do NOT read `references/visual-components.md` — it contains full HTML templates for subagents, not needed for planning). Present plan:
 
 ```
 Slide 1: Title -- "Topic Name" with subtitle + accent gradient
@@ -343,56 +343,49 @@ Executive deck rules:
 
 ## Slide Structure
 
-> **DEFERRED REFERENCE**: Skip during Steps 0–2. Read at the start of Step 3 only, immediately before building.
+> **SUBAGENT-ONLY REFERENCE**: Do NOT read `references/slide-structure.md` — it is embedded in the subagent bundle. The summary below is for planning context only.
 
-Read `references/slide-structure.md` for the complete slide flow, exec deck structure, Presenter/Agenda/BLUF rules, and visual layout guidelines.
+Slide flow, exec deck structure, Presenter/Agenda/BLUF rules, and visual layout guidelines are defined in `references/slide-structure.md` (delivered to subagents via the bundle).
 
 ---
 
 ## Content Rules
 
-> **DEFERRED REFERENCE**: Skip during Steps 0–2. Read at the start of Step 3 only, immediately before building.
+> **SUBAGENT-ONLY REFERENCE**: Do NOT read `references/content-rules.md` — it is embedded in the subagent bundle. The summary below is for planning context only.
 
-Read `references/content-rules.md` for all 20 rules (always-apply rules 1–13 and conditional rules 14–20).
+All 20 content rules (always-apply rules 1–13 and conditional rules 14–20) are defined in `references/content-rules.md` (delivered to subagents via the bundle).
 
 ---
 
 ## HTML Output
 
-> **DEFERRED REFERENCE**: Skip during Steps 0–2. Read at the start of Step 3 only, immediately before building.
+> **SUBAGENT-ONLY REFERENCE**: Do NOT read `references/html-output-spec.md` — it is embedded in the subagent bundle. The summary below is for planning context only.
 
-Read `references/html-output-spec.md` for layout, color palette, typography scale, navigation, transitions, and speaker notes specs.
+Layout, color palette, typography scale, navigation, transitions, and speaker notes specs are defined in `references/html-output-spec.md` (delivered to subagents via the bundle).
 
 ---
 
 ## Visual Components
 
-> **DEFERRED REFERENCE**: Skip during Steps 0–2. Read this section at the start of Step 3 only, immediately before building.
+> **SUBAGENT-ONLY REFERENCE**: Do NOT read `references/visual-components.md` — it is embedded in the subagent bundle. The component name catalog below is for Step 2 planning only.
 
 Every slide MUST have visual component. Text-only slides not allowed.
 
-**Read `references/visual-components.md`** for full catalog with HTML/CSS: Card Grid, Comparison Panel, Stat Callout, Step Flow, Quote Block, Icon + Label List, Code Block, Timeline, Image + Caption, Metric Dashboard, Architecture Diagram, Progress Ring, Animated Counter, Gradient Illustration, Inline SVG Diagram, Custom Graphic, Table, Two-Column Layout, CTA Block, Callout Banner, Tag / Badge Row, Vertical Bar Chart, Horizontal Bar Chart, Line / Area Chart, Donut Chart.
+Component catalog (full HTML templates delivered to subagents via bundle): Card Grid, Comparison Panel, Stat Callout, Step Flow, Quote Block, Icon + Label List, Code Block, Timeline, Image + Caption, Metric Dashboard, Architecture Diagram, Progress Ring, Animated Counter, Gradient Illustration, Inline SVG Diagram, Custom Graphic, Table, Two-Column Layout, CTA Block, Callout Banner, Tag / Badge Row, Vertical Bar Chart, Horizontal Bar Chart, Line / Area Chart, Donut Chart.
 
 ---
 
 ### Step 3: Build the HTML
 
-Generate single self-contained HTML file following Slide Structure, HTML Output, and Content Rules above. Every slide MUST have visual component from `references/visual-components.md`.
+Generate single self-contained HTML file following Slide Structure, HTML Output, and Content Rules above. Every slide MUST have a visual component from the catalog listed in the Visual Components section above.
 
-**Before starting**, inform user: "Building slide deck — may take a few minutes while reading reference files and generating slides."
+**Before starting**, inform user: "Building slide deck — may take a few minutes while generating slides."
 
-**Before writing any HTML, read ALL NINE reference files.** Mandatory — skipping causes structural errors:
-- `references/presentation-runtime.md` — **READ THIS FIRST** — defines exact nav HTML/CSS, slide transition CSS (opacity-only, no transform), complete dual-mode speaker notes (N = popup, B = bottom panel). Copy exactly. Do not improvise.
-- `references/slide-structure.md`
-- `references/content-rules.md`
-- `references/html-output-spec.md`
-- `references/slide-build-protocol.md`
-- `references/visual-components.md`
-- `references/css-animations.md`
-- `references/accent-colors.md`
-- `references/graphics-embedding.md`
+**Before writing any HTML, read `references/slide-build-protocol.md`** — defines subagent prompt block, batch loop, insert/verify/embed phases, and slide ID rules. This is the only build-phase reference the main agent reads directly.
 
-**Build mode:** All HTML generation delegated to subagents. Main context orchestrates: reads refs, launches subagents, checks progress, handles embed/QR/validation. Keeps HTML out of main context, preserving room for iteration.
+**Do NOT read the other 8 reference files** (`presentation-runtime.md`, `slide-structure.md`, `content-rules.md`, `html-output-spec.md`, `visual-components.md`, `css-animations.md`, `accent-colors.md`, `graphics-embedding.md`) at build time. They are compressed into `references/subagent-bundle.md` which gets embedded in each subagent prompt. (`accent-colors.md` is read at Step 1 for color selection — do not re-read it here.) Reading them into main context at Step 3 wastes ~10,000 words for no benefit.
+
+**Build mode:** All HTML generation delegated to subagents. Main context orchestrates: reads `slide-build-protocol.md`, launches subagents (passing `references/subagent-bundle.md` + `references/material-icons.md` by embedding their contents in each subagent prompt), checks progress, handles embed/QR/validation. Keeps HTML and reference content out of main context, preserving room for iteration.
 
 **Inlining Snowflake logo (if selected in Step 1):** Place bare `{{SNOWFLAKE_LOGO}}` token on its own line as **first child inside `.slide-inner`** on title slide (before `<h3>` eyebrow). `embed_image.py` replaces it automatically — do NOT read SVG file, do NOT write `<svg>` or `<path>` markup.
 
@@ -506,15 +499,13 @@ Ask: "Take a moment to review. Let me know any changes — wording, adding/remov
 - **Add/remove external link**: Re-run `generate_qr_appendix.py` — idempotent, rebuilds QR appendix.
 - **Any structural change**: Re-run `validate_deck.py --context 5` before presenting updated deck.
 
+**When user signals they're done** (e.g., "looks good", "I'm happy with it", "no more changes", "done", "ship it"): offer PowerPoint export before closing out. Use `ask_user_question`: "Deck is finalized! Would you like me to export a PowerPoint (.pptx) version? Slides are exported as high-resolution screenshots with speaker notes preserved." Options: (1) Yes — export to PowerPoint, (2) No — we're done. If **Yes**, proceed to Step 7.
+
 ---
 
 ### Step 7: Export to PowerPoint (optional)
 
-> [OPTIONAL — only read and execute this step if user requests PowerPoint export. Skip entirely otherwise.]
-
-Offer proactively once validated and iteration complete, or immediately if user asks for "export to PowerPoint", "save as .pptx", etc.
-
-> "Would you like a PowerPoint version? I can export as `.pptx` with speaker notes included."
+> [Triggered by Step 6 offer or direct user request. Skip if user declined or never asked.]
 
 **Prerequisites (one-time per machine):** Download Playwright's Chromium before first use. Skip if already done:
 
