@@ -9,7 +9,7 @@ Executive mode: [EXEC_MODE — true or false]
 
 Do not rely on recalled knowledge alone. Actively use every tool available to you:
 - **Web search** — find current statistics, news, and third-party sources
-- **Glean / internal search** — find internal docs, customer data, and prior presentations
+- **Internal search** — find internal docs, data, and prior presentations
 - **MCP tools** — query any connected data sources (Salesforce, Confluence, Jira, etc.)
 - **Other skills** — invoke relevant skills if the topic warrants it
 
