@@ -151,6 +151,8 @@ html-presentaion-skill/          ← repo root
     │   ├── slide-structure.md
     │   ├── validation-prompt.md
     │   └── visual-components.md
+    ├── templates/
+    │   └── shell_template.html
     └── scripts/
         ├── run_script.py
         ├── generate_shell.py
