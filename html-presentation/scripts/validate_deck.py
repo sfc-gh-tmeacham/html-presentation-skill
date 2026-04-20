@@ -91,6 +91,13 @@ Checks performed:
    hardcoded light background colors (``#fff``, ``white``, ``#f8fafc``, etc.)
    or dark text colors (``#1e293b``, ``#0f172a``, ``#374151``, etc.) that
    override the dark theme
+35. **scale-pop underuse** — warns when a large number element (font-size >= 4rem) uses
+   ``.anim`` but not ``.scale-pop``; the spring entrance animation is more impactful for
+   hero numbers and is pre-loaded in the shell (Pattern 9 in css-animations.md)
+36. **chart-v percentage bar heights** — fails when a ``.chart-v`` element contains a bar
+   div with ``height:X%`` inside a flex column with no explicit height; percentage heights
+   resolve to 0 in this context and the bars are invisible; use pixel heights computed as
+   ``round(value / max_value × 280)`` (see Vertical Bar Chart in visual-components.md)
 
 Usage::
 
@@ -1346,6 +1353,8 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         passes.append("No legacy material-icons class usage found")
 
     # 33. Missing slide-inner wrapper — slide's first child div should be .slide-inner
+    ABSOLUTE_POSITION_RE = re.compile(r'position\s*:\s*absolute', re.IGNORECASE)
+
     missing_inner: list[str] = []
     for sb in slide_blocks:
         sid = sb.group(2)
@@ -1355,15 +1364,21 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
             continue
         first_div_m = re.search(r'<div\b[^>]*>', slide_body, re.IGNORECASE)
         if first_div_m:
-            if not SLIDE_INNER_RE.search(first_div_m.group(0)):
-                cls_m = re.search(r'class="([^"]*)"', first_div_m.group(0), re.IGNORECASE)
-                found_cls = cls_m.group(1) if cls_m else "(no class)"
-                pos = sb.start() + len(slide_tag) + first_div_m.start()
-                ln = line_no(html, pos)
-                missing_inner.append(
-                    f"{sid} line {ln}: direct child is class=\"{found_cls}\" — "
-                    f"must be \"slide-inner\" (content may misalign)"
-                )
+            first_div_tag = first_div_m.group(0)
+            if SLIDE_INNER_RE.search(first_div_tag):
+                continue
+            if ABSOLUTE_POSITION_RE.search(first_div_tag):
+                if SLIDE_INNER_RE.search(slide_body):
+                    continue
+            cls_m = re.search(r'class="([^"]*)"', first_div_tag, re.IGNORECASE)
+            found_cls = cls_m.group(1) if cls_m else "(no class)"
+            pos = sb.start() + len(slide_tag) + first_div_m.start()
+            ln = line_no(html, pos)
+            missing_inner.append(
+                f"{sid} line {ln}: direct child is class=\"{found_cls}\" — "
+                f"must be \"slide-inner\" or a position:absolute orb wrapper "
+                f"(content may misalign)"
+            )
     if missing_inner:
         warns.append(
             f"{len(missing_inner)} slide(s) missing .slide-inner wrapper: "
@@ -1371,7 +1386,7 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
             + (f"  (+{len(missing_inner) - 1} more)" if len(missing_inner) > 1 else "")
         )
     else:
-        passes.append("All slides use .slide-inner wrapper (or gradient-bg)")
+        passes.append("All slides use .slide-inner wrapper (or gradient-bg or orb wrapper pattern)")
 
     # 34. Light-theme color override — hardcoded light backgrounds / dark text inside slides
     light_theme_hits: list[str] = []
@@ -1398,6 +1413,70 @@ def validate(html_path: Path) -> tuple[list[str], list[str], list[str]]:
         )
     else:
         passes.append("No light-theme color overrides detected in slides")
+
+    # 35. scale-pop underuse — large stat numbers using .anim but not .scale-pop
+    LARGE_FONT_ANIM_RE = re.compile(
+        r'class="[^"]*\banim\b[^"]*"[^>]*style="[^"]*font-size\s*:\s*(?:clamp\([^)]*,\s*)?([\d.]+)rem',
+        re.IGNORECASE,
+    )
+    SCALE_POP_CLASS_RE = re.compile(r'class="[^"]*\bscale-pop\b[^"]*"', re.IGNORECASE)
+
+    scale_pop_missing: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        slide_body = sb.group(3)
+        for m in LARGE_FONT_ANIM_RE.finditer(slide_body):
+            try:
+                size = float(m.group(1))
+            except (ValueError, TypeError):
+                continue
+            if size >= 4.0:
+                pos = sb.start() + len(sb.group(1)) + m.start()
+                ln = line_no(html, pos)
+                context_str = slide_body[max(0, m.start()-20):m.start()+80].replace('\n', ' ')
+                scale_pop_missing.append(f"{sid} line {ln}: font-size {size}rem uses .anim — consider .scale-pop for spring entrance")
+
+    if scale_pop_missing:
+        warns.append(
+            f"{len(scale_pop_missing)} large-number element(s) using .anim instead of .scale-pop "
+            f"(Pattern 9 — spring entrance, pre-loaded, use one per slide): "
+            f"{scale_pop_missing[0]}"
+            + (f"  (+{len(scale_pop_missing) - 1} more)" if len(scale_pop_missing) > 1 else "")
+        )
+    else:
+        passes.append("Large stat numbers use .scale-pop or have no .anim alternative")
+
+    # 36. chart-v percentage bar heights — height:X% on flex children resolves to 0
+    chart_v_pct_hits: list[str] = []
+    for sb in slide_blocks:
+        sid = sb.group(2)
+        slide_body = sb.group(3)
+        for chart_m in re.finditer(r'class="[^"]*chart-v[^"]*"', slide_body, re.IGNORECASE):
+            chart_start = chart_m.start()
+            chart_snippet = slide_body[chart_start:chart_start + 2000]
+            for col_m in re.finditer(
+                r'flex-direction\s*:\s*column',
+                chart_snippet, re.IGNORECASE
+            ):
+                nearby = chart_snippet[col_m.start():col_m.start() + 400]
+                pct_m = re.search(r'height\s*:\s*(\d+(?:\.\d+)?)%', nearby, re.IGNORECASE)
+                if pct_m:
+                    pos = sb.start() + len(sb.group(1)) + chart_start + col_m.start()
+                    ln = line_no(html, pos)
+                    chart_v_pct_hits.append(
+                        f"{sid} line {ln}: chart-v bar uses height:{pct_m.group(1)}% "
+                        f"(resolves to 0 in flex column without explicit parent height) "
+                        f"— use pixel heights: bar_px = round(value/max × 280)"
+                    )
+
+    if chart_v_pct_hits:
+        fails.append(
+            f"{len(chart_v_pct_hits)} chart-v bar(s) using height:% (bars will be invisible) — "
+            f"use explicit pixel heights (MAX=280px): {chart_v_pct_hits[0]}"
+            + (f"  (+{len(chart_v_pct_hits) - 1} more)" if len(chart_v_pct_hits) > 1 else "")
+        )
+    else:
+        passes.append("No chart-v bars use percentage heights (pixel heights confirmed)")
 
     return passes, warns, fails
 

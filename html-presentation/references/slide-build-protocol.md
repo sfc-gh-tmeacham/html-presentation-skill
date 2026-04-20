@@ -27,7 +27,22 @@ Launch all BATCH_SIZE subagents **simultaneously** in a single message (multiple
 Each subagent prompt MUST include:
 
 - **Task** (exactly): "Generate the HTML for slide N only. Write the complete `<div id='sN' class='slide'>...</div>` block to `{deck_folder}/drafts/slide_N.html` using the `write` tool. Do NOT return the HTML as text. Do NOT edit the main deck file. Do NOT include any `<!-- INSERT_SLIDE_ -->` markers."
-- **Slide wrapper rule** (mandatory): "The direct child of `<div id='sN' class='slide'>` MUST be `<div class='slide-inner'>`. Never create a custom wrapper div or add `class='slide-content'`, custom padding, or background-color to the slide div itself. The `.slide-inner` class handles padding, centering, and max-width. Exception: title slides use `gradient-bg` class on the slide div and may place ambient glow orbs before `.slide-inner`."
+- **Slide wrapper rule** (mandatory): "The direct child of `<div id='sN' class='slide'>` MUST be `<div class='slide-inner'>`. Never create a custom wrapper div or add `class='slide-content'`, custom padding, or background-color to the slide div itself. The `.slide-inner` class handles padding, centering, and max-width.
+
+  **Exception — ambient glow orbs / gradient backgrounds (ANY slide, not only title slides):** If a slide uses full-bleed ambient glow orbs as a decorative background, place them as direct children of the `.slide` div BEFORE `.slide-inner`, using this exact pattern:
+  ```html
+  <div id='sN' class='slide' style='overflow:hidden;'>
+    <!-- Ambient orbs — direct children of slide, z-index:0, percentage-based sizes -->
+    <div style='position:absolute;top:-10%;left:-8%;width:55%;height:70%;border-radius:50%;
+      background:radial-gradient(circle,rgba(20,184,166,0.18) 0%,transparent 65%);
+      pointer-events:none;z-index:0;'></div>
+    <!-- add 2-3 orbs total, vary size and position -->
+    <div class='slide-inner' style='position:relative;z-index:1;...'>
+      <!-- content -->
+    </div>
+  </div>
+  ```
+  **NEVER place orb divs inside `.slide-inner`.** If `.slide-inner` has `overflow:hidden`, any orb with negative pixel offsets will be clipped to a corner fragment. Always use percentage-based (`top:-10%`) not pixel-based (`top:-120px`) coordinates so orbs scale with slide dimensions."
 - **Dark theme rule** (mandatory): "This is a dark-background deck (`background:#0a0a0a`). NEVER hardcode light colors inside slides: `background:#fff`, `background:white`, `color:#1e293b`, `color:#475569`, `color:#374151`, `color:#64748b`. Use CSS variables ONLY: `var(--text)` for primary text, `var(--secondary)` for muted text, `var(--bg)` for background, `var(--border)` for borders, `var(--card)` for card/panel backgrounds, `var(--accent)` for highlights and emphasis. Card backgrounds inherit from the `.card` shell class — do not re-specify them."
 - **Icon system rule** (mandatory): "ALWAYS use `class=\"material-symbols-rounded\"` for icon spans. NEVER use `class=\"material-icons\"` — this is the legacy API and renders icon names as literal text, not glyphs. Font-size on icon spans must use `rem`, not `px`."
 - **No inline icon SVGs** (mandatory): "For decorative icons, always use `<span class=\"material-symbols-rounded\">` — never inline SVG icon paths. The SVG viewBox gap rule (12% max top/bottom) makes standard icon SVG paths (with `viewBox=\"0 0 24 24\"`) non-compliant by default."
@@ -47,6 +62,7 @@ Each subagent prompt MUST include:
   - `.two-col` — two-column layouts (content left, visual right or vice versa)
   - `.comparison-panel` — side-by-side comparison with divider
   Use these classes instead of duplicating their properties as inline `style=` attributes. Inline styles are only for values that differ from the class defaults (e.g. a custom `grid-template-columns` ratio, a specific `border-left` color, overriding centered text alignment). If your slide's primary visual element uses any of these layouts, the outer container MUST have the corresponding class — otherwise the validator will report it as missing a visual component."
+- **Scale-pop rule** (mandatory): "Any element displaying a large metric or stat number (font-size ≥ 4rem) MUST use `class='scale-pop'` instead of or in addition to `class='anim'`. The `.scale-pop` spring entrance animation is pre-loaded in the shell CSS and triggered automatically by `show()` — no extra CSS or JS is needed. This applies to: Stat Callout number divs, Metric Dashboard number divs, Animated Counter divs, and any other hero-size number. Use sparingly — maximum ONE `.scale-pop` element per slide."
 - Slide plan entry for THIS SLIDE ONLY (e.g., `Slide 5: Core — Architecture Diagram showing the data flow`)
 - Full slide plan for narrative context
 - **Reference bundle** (embed full text): `references/subagent-bundle.md` — condensed version of all 9 reference files (~79% smaller). Contains all HTML component templates, CSS animation patterns, SVG rules, typography specs, and embedding tokens. Use this instead of the 9 individual files to save context window space. If a subagent needs the full uncompressed version of a specific file (rare), pass that single file alongside the bundle.

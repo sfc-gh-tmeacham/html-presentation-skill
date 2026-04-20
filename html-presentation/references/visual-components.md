@@ -82,12 +82,16 @@ Use for: old vs new, before vs after, tool A vs tool B.
 One huge number with a short label.
 Use for: impressive data points, growth numbers, costs.
 
+> **Use `.scale-pop` (not `.anim`) on the number div.** The spring entrance animation is pre-loaded in the shell and fires automatically via `show()` — no extra CSS or JS needed. It is far more impactful than a fade-up for large numbers. Use sparingly: one `.scale-pop` element per slide maximum.
+
 ```html
 <div class="anim" style="text-align:center;">
-  <div style="font-size:6rem;font-weight:800;color:var(--accent);line-height:1;">42%</div>
+  <div class="scale-pop" style="font-size:6rem;font-weight:800;color:var(--accent);line-height:1;">42%</div>
   <p style="font-size:1.375rem;color:var(--secondary);margin-top:8px;">Label text</p>
 </div>
 ```
+
+Note: the outer `div.anim` still fades in the whole block; `.scale-pop` on the number itself triggers the spring pop as an additional layer.
 
 ---
 
@@ -315,15 +319,34 @@ See `reference/css-animations.md` pattern 5.
 ---
 
 ## Gradient Illustration
-CSS-only decorative visual using radial/linear gradients and layered shapes.
-Use for: title slides, section dividers, takeaway slides.
+CSS-only decorative ambient glow orbs using radial gradients.
+Use for: title slides, section dividers, takeaway/commitment slides, any slide needing atmospheric depth.
+
+> **Placement rule (CRITICAL):** The orb wrapper and orb divs MUST be **direct children of `.slide`**, placed **BEFORE `.slide-inner`**. NEVER place them inside `.slide-inner`. If `slide-inner` has `overflow:hidden`, negative-offset orbs will be clipped to tiny corner fragments.
+>
+> Add `overflow:hidden` to the `.slide` div itself (not to `.slide-inner`). Use **percentage-based** coordinates (`top:-10%`) not pixel coordinates (`top:-200px`) so orbs scale with slide dimensions.
 
 ```html
-<div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;">
-  <div style="position:absolute;top:-200px;right:-200px;width:600px;height:600px;
-    border-radius:50%;background:radial-gradient(circle,rgba(41,181,232,0.15),transparent 70%);"></div>
+<div id="sN" class="slide" style="overflow:hidden;">
+  <!-- Ambient orbs — BEFORE slide-inner, z-index:0, percentage coords -->
+  <div style="position:absolute;top:-10%;left:-8%;width:55%;height:70%;border-radius:50%;
+    background:radial-gradient(circle,rgba(41,181,232,0.18) 0%,transparent 65%);
+    pointer-events:none;z-index:0;"></div>
+  <div style="position:absolute;bottom:-10%;right:-8%;width:60%;height:70%;border-radius:50%;
+    background:radial-gradient(circle,rgba(41,181,232,0.12) 0%,transparent 65%);
+    pointer-events:none;z-index:0;"></div>
+  <div style="position:absolute;top:30%;left:50%;width:40%;height:55%;border-radius:50%;
+    background:radial-gradient(circle,rgba(41,181,232,0.07) 0%,transparent 65%);
+    pointer-events:none;z-index:0;"></div>
+  <div class="slide-inner" style="position:relative;z-index:1;...">
+    <!-- content -->
+  </div>
 </div>
 ```
+
+- Use 2–4 orbs maximum. Vary size (40%–65% of slide width) and opacity (0.07–0.22).
+- Accent color at 12–22% opacity for primary orbs, 7–12% for accent orbs.
+- Always pair with `z-index:1` on `.slide-inner` so content renders above orbs.
 
 ---
 
@@ -532,29 +555,35 @@ Use for the optional presenter slide immediately after the Title slide. See SKIL
 ---
 
 ## Vertical Bar Chart
-CSS flexbox bars sized by percentage. No coordinate math required.
-Use for: quarterly comparisons, ranked values, before/after metrics.
+CSS flexbox bars with explicit pixel heights. Use for: quarterly comparisons, ranked values, before/after metrics.
+
+> **CRITICAL — do NOT use `height:X%` on bar divs.** Percentage heights on flex children only resolve if the parent flex item has an explicit height. When the parent column div has no explicit height (sized by content/flex), the bars collapse to 0. Always use pixel heights computed from a fixed MAX_HEIGHT.
+
+**Height formula:** `bar_px = round((value / max_value) × MAX_HEIGHT_PX)` where `MAX_HEIGHT_PX = 280`.
 
 ```html
-<div class="anim chart-v" style="width:100%;">
+<!-- MAX_HEIGHT_PX = 280; bar_height_px = round(value / max_value × 280) -->
+<div class="anim chart-v" style="width:100%;max-width:840px;margin:0 auto;">
   <div style="display:flex;align-items:flex-end;justify-content:center;
-    gap:clamp(12px,2vw,28px);height:clamp(140px,22vh,220px);
-    border-bottom:1px solid var(--border);position:relative;">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:80px;">
-      <span style="font-size:0.8rem;font-weight:600;color:var(--accent);">$4.2M</span>
-      <div style="width:100%;height:62%;background:var(--accent);border-radius:6px 6px 0 0;"></div>
+    gap:clamp(18px,3vw,48px);height:280px;
+    border-bottom:2px solid var(--border);">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;max-width:130px;">
+      <span style="font-size:0.95rem;font-weight:700;color:var(--accent);">$4.2M</span>
+      <div style="width:100%;height:174px;background:var(--accent);border-radius:8px 8px 0 0;"></div>
+      <!-- 174 = round(62% × 280) -->
     </div>
-    <!-- repeat for each bar; vary height % proportional to max value -->
+    <!-- repeat for each bar — only height changes per bar -->
   </div>
-  <div style="display:flex;justify-content:center;gap:clamp(12px,2vw,28px);margin-top:8px;">
-    <span style="flex:1;max-width:80px;text-align:center;font-size:0.75rem;color:var(--secondary);">Q1</span>
+  <div style="display:flex;justify-content:center;gap:clamp(18px,3vw,48px);margin-top:10px;">
+    <span style="flex:1;max-width:130px;text-align:center;font-size:0.85rem;color:var(--secondary);">Q1</span>
     <!-- repeat label for each bar -->
   </div>
 </div>
 ```
 
-- Set each bar's `height` as a `%` relative to the max value (max = 100%, others proportional).
-- Use `background:var(--accent)` for the primary series; use `#10B981`, `#F59E0B` for multi-series.
+- **Max bar (100%):** `height:280px`. All other bars: `height:round(pct × 280)px`.
+- Use `background:var(--accent)` for primary series; `#10B981`, `#F59E0B` for multi-series.
+- Highlight the tallest bar with `var(--accent)`; use `rgba(255,255,255,0.25)` for secondary bars.
 - Wrap in a Two-Column Layout when pairing with a stat or bullet list.
 
 ---

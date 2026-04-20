@@ -87,7 +87,7 @@ Slide structure:
   <!-- optional: <div class="speaker-notes">...</div> -->
 </div>
 ```
-`.slide-inner` = padding `clamp(1.65rem,4.4vh,3.85rem) clamp(1.65rem,5.5vw,4.4rem)`, `max-width:min(1320px,95vw)`. Exception: `gradient-bg` title slides may place glow orbs before `.slide-inner`.
+`.slide-inner` = padding `clamp(1.65rem,4.4vh,3.85rem) clamp(1.65rem,5.5vw,4.4rem)`, `max-width:min(1320px,95vw)`. Exception: ANY slide may place ambient glow orb divs as direct children BEFORE `.slide-inner` (add `overflow:hidden` to the `.slide` div, use percentage-based coords, set `z-index:0` on orbs and `z-index:1` on `.slide-inner`). NEVER place orbs inside `.slide-inner`.
 
 CSS vars: `--bg:#0a0a0a`, `--text:#fff`, `--secondary:#a0a0a0`, `--card:#1a1a1a`, `--border:#2a2a2a`, `--accent` per deck.
 
@@ -140,9 +140,10 @@ Shell: `.comparison-panel`
 ```
 
 ### Stat Callout
+> Use `.scale-pop` on the number div (not `.anim`). Pre-loaded, fires automatically. One per slide max.
 ```html
 <div class="anim" style="text-align:center;">
-  <div style="font-size:6rem;font-weight:800;color:var(--accent);line-height:1;">42%</div>
+  <div class="scale-pop" style="font-size:6rem;font-weight:800;color:var(--accent);line-height:1;">42%</div>
   <p style="font-size:1.375rem;color:var(--secondary);margin-top:8px;">Label text</p>
 </div>
 ```
@@ -283,20 +284,24 @@ Swap icon/color: info=accent, warning=`#F59E0B`, error=`#EF4444`, success=`#10B9
 ```
 
 ### Vertical Bar Chart
+> **NEVER use `height:X%` on bar divs — they collapse to 0 in flex columns without explicit height. Always use pixel heights.**
+> Formula: `bar_px = round(value / max_value × 280)`. MAX_HEIGHT_PX = 280.
+
 ```html
-<div class="anim chart-v" style="width:100%;">
-  <div style="display:flex;align-items:flex-end;justify-content:center;gap:clamp(12px,2vw,28px);height:clamp(140px,22vh,220px);border-bottom:1px solid var(--border);position:relative;">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:80px;">
-      <span style="font-size:0.8rem;font-weight:600;color:var(--accent);">$4.2M</span>
-      <div style="width:100%;height:62%;background:var(--accent);border-radius:6px 6px 0 0;"></div>
+<!-- MAX_HEIGHT_PX = 280; bar_height_px = round(value / max_value × 280) -->
+<div class="anim chart-v" style="width:100%;max-width:840px;margin:0 auto;">
+  <div style="display:flex;align-items:flex-end;justify-content:center;gap:clamp(18px,3vw,48px);height:280px;border-bottom:2px solid var(--border);">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;max-width:130px;">
+      <span style="font-size:0.95rem;font-weight:700;color:var(--accent);">$4.2M</span>
+      <div style="width:100%;height:174px;background:var(--accent);border-radius:8px 8px 0 0;"></div>
     </div>
   </div>
-  <div style="display:flex;justify-content:center;gap:clamp(12px,2vw,28px);margin-top:8px;">
-    <span style="flex:1;max-width:80px;text-align:center;font-size:0.75rem;color:var(--secondary);">Q1</span>
+  <div style="display:flex;justify-content:center;gap:clamp(18px,3vw,48px);margin-top:10px;">
+    <span style="flex:1;max-width:130px;text-align:center;font-size:0.85rem;color:var(--secondary);">Q1</span>
   </div>
 </div>
 ```
-Height as `%` relative to max. Multi-series: `#10B981`, `#F59E0B`.
+Multi-series: `#10B981`, `#F59E0B`. Highlight max bar with `var(--accent)`, others `rgba(255,255,255,0.25)`.
 
 ### Horizontal Bar Chart
 Shell: `.chart-h`
@@ -365,9 +370,19 @@ Shell: `.counter`. Set `--target:N`.
 ```
 
 ### Gradient Illustration
+> **Placement rule:** Orb wrapper MUST be a **direct child of `.slide`**, placed **BEFORE `.slide-inner`** — NEVER inside `.slide-inner`. Add `overflow:hidden` to the `.slide` div. Use percentage-based coordinates (e.g. `top:-10%`) not pixel offsets.
+
 ```html
-<div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;">
-  <div style="position:absolute;top:-200px;right:-200px;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(41,181,232,0.15),transparent 70%);"></div>
+<div id="sN" class="slide" style="overflow:hidden;">
+  <div style="position:absolute;top:-10%;left:-8%;width:55%;height:70%;border-radius:50%;
+    background:radial-gradient(circle,rgba(41,181,232,0.18) 0%,transparent 65%);
+    pointer-events:none;z-index:0;"></div>
+  <div style="position:absolute;bottom:-10%;right:-8%;width:60%;height:70%;border-radius:50%;
+    background:radial-gradient(circle,rgba(41,181,232,0.12) 0%,transparent 65%);
+    pointer-events:none;z-index:0;"></div>
+  <div class="slide-inner" style="position:relative;z-index:1;">
+    <!-- content -->
+  </div>
 </div>
 ```
 
