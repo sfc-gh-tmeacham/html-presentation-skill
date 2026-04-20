@@ -5,6 +5,16 @@ Audience: [AUDIENCE]
 Key points to cover: [KEY_POINTS]
 Executive mode: [EXEC_MODE — true or false]
 
+## Tools (use all available)
+
+Do not rely on recalled knowledge alone. Actively use every tool available to you:
+- **Web search** — find current statistics, news, and third-party sources
+- **Glean / internal search** — find internal docs, customer data, and prior presentations
+- **MCP tools** — query any connected data sources (Salesforce, Confluence, Jira, etc.)
+- **Other skills** — invoke relevant skills if the topic warrants it
+
+If a tool returns no useful result, note that in the brief. Do not substitute silence with invention.
+
 ## Accuracy rules (read carefully before writing anything)
 
 **Wrong is 3x worse than unknown.** Do not guess. If you are not confident in a fact, label it
