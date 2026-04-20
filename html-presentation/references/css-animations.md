@@ -2,195 +2,186 @@
 
 Use animations when they help the audience understand content — revealing steps in order, drawing attention to key numbers, showing relationships. Never animate just for decoration.
 
+**Shell note:** CSS for Patterns 1–9 and 11–13 is pre-loaded in every shell. Do NOT copy these rules into slide `<style>` blocks — just use the class names directly. Pattern 10 (`.typewriter`) CSS is not in the shell and must be added per-slide. Pattern 14 CSS is pre-loaded; only the JS needs to be added per-deck.
+
+---
+
 ## When to Animate
 
-| Situation | Animation | Why it helps |
-|-----------|-----------|-------------|
-| Slides entering the viewport | Fade-in + slide-up | Guides the eye onto the new slide |
-| Sequential process / flow steps | Staggered fade-in | Reinforces the order of steps |
-| Stat cards with numbers | Counter roll-up | Draws attention to key metrics, implies dynamism |
-| Progress rings | Fill animation | Communicates magnitude more intuitively than a static ring |
-| Architecture diagrams with arrows | Draw-on / dash animation | Shows data flow direction |
-| Live / active status indicators | Pulse or breathing glow | Communicates "running" or "active" state |
-| Hover on interactive cards | Scale + border glow | Signals interactivity |
-| Comparison panels / two-column layouts | Slide-in from sides | Pairs elements as opposing forces entering from opposite directions |
-| Stat callouts and key numbers | Scale pop (spring) | More impactful than fade+slide; makes numbers feel significant |
-| Code reveals, terminal demos | Typewriter | Builds anticipation; simulates live typing |
-| Product demo / loading state slides | Shimmer sweep | Implies data loading or pipeline activity |
-| Title slides and section dividers | Gradient shift | Adds ambient depth without distracting motion |
-| Highlighted cards or callouts | Border glow pulse | Draws attention without moving the element |
+| Situation | Animation | Pattern |
+|-----------|-----------|---------|
+| Slides entering the viewport | Fade-in + slide-up | 1 (`.anim`) |
+| Sequential process / flow steps | Staggered fade-in | 2 (`.stagger`) |
+| Stat cards with numbers | Counter roll-up | 5 (`.counter`) |
+| Progress rings | Fill animation | 4 (`.ring-fill`) |
+| Architecture diagrams with arrows | Draw-on / dash animation | 7 (`.draw-line`) |
+| Live / active status indicators | Pulse | 6 (`.pulse-dot`) |
+| Highlighted cards or callouts | Border glow pulse | 13 (`.glow-pulse`) |
+| Comparison panels / two-column layouts | Slide-in from sides | 8 (`.anim-left` / `.anim-right`) |
+| Stat callouts and key numbers | Scale pop (spring) | 9 (`.scale-pop`) |
+| Code reveals, terminal demos | Typewriter | 14 (`twTypewrite`) |
+| Product demo / loading state slides | Shimmer sweep | 11 (`.shimmer`) |
+| Title slides and section dividers | Gradient shift | 12 (`.gradient-bg`) |
 
 ## When NOT to Animate
 
 - Static comparison panels or tables (the audience needs to scan, not wait)
-- Code block text: avoid CSS clip sweeps or full-block fades that hide content mid-read; use the JS typewriter (Pattern 14) instead — it reveals characters in sequence while preserving syntax-highlight span coloring
+- Code block text: avoid CSS clip sweeps or full-block fades that hide content mid-read; use Pattern 14 instead — it reveals characters in sequence while preserving syntax-highlight span coloring
 - Body text or quote blocks (let the content be immediately readable)
 - Anything that loops infinitely unless it represents a live/ongoing state (exceptions: pulse for "live", shimmer for "loading", gradient-shift for ambient title backgrounds)
+
+---
 
 ## Approved Patterns
 
 ### 1. Fade-in on slide enter
-```css
-.anim { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
-.anim.visible { opacity: 1; transform: translateY(0); }
-```
+**Shell class:** `.anim` — fires automatically via `.slide.active .anim`, no JS needed. Add to any element.
+
+**JS-triggered alternative:** `.anim.visible` is also defined — add `.visible` programmatically for reveal-on-click or other controlled triggers.
+
+---
 
 ### 2. Staggered children
-```css
-.stagger > *:nth-child(1) { transition-delay: 0s; }
-.stagger > *:nth-child(2) { transition-delay: 0.1s; }
-.stagger > *:nth-child(3) { transition-delay: 0.2s; }
-.stagger > *:nth-child(4) { transition-delay: 0.3s; }
+**Shell class:** `.stagger` — add to a parent whose children each carry `class="anim"`. Up to 6 children animate in sequence (0s–0.5s delays). Fires automatically with `.anim` — no JS needed.
+
+```html
+<div class="card-grid anim stagger">
+  <div class="card">...</div>
+  <div class="card">...</div>
+  <div class="card">...</div>
+</div>
 ```
+
+---
 
 ### 3. Progress bar fill
-```css
-.progress-fill { width: 0; transition: width 1s ease; }
-.progress-fill.visible { width: var(--target-width); }
+**Shell class:** `.progress-fill` — set `--target-width` inline. **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+```html
+<div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+  <div class="progress-fill" style="--target-width:75%;height:100%;background:var(--accent);border-radius:4px;"></div>
+</div>
 ```
+
+---
 
 ### 4. SVG progress ring
-```css
-.ring-fill { stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 1.2s ease; }
-.ring-fill.visible { stroke-dashoffset: var(--target-offset); }
+**Shell class:** `.ring-fill` — set `--target-offset` on the `<circle>` (the `stroke-dashoffset` value for the desired fill percentage). **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+```html
+<circle class="ring-fill" cx="90" cy="90" r="80" fill="none" stroke="var(--accent)"
+  stroke-width="12" stroke-linecap="round" transform="rotate(-90 90 90)"
+  style="--target-offset:80;"/>
 ```
+
+---
 
 ### 5. Counter roll-up
-```css
-@property --num { syntax: '<integer>'; initial-value: 0; inherits: false; }
-.counter { --num: 0; transition: --num 1.5s ease; counter-reset: num var(--num); font-variant-numeric: tabular-nums; }
-.counter::after { content: counter(num); }
-.counter.visible { --num: var(--target); }
+**Shell class:** `.counter` (with `@property --num` registered). Set `style="--target:N"` to the end value. **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+```html
+<div class="counter anim" style="font-size:4.5rem;font-weight:800;color:var(--accent);--target:42;"></div>
 ```
+
+---
 
 ### 6. Pulse indicator (live status)
-```css
-@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.8); } }
-.pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); position: relative; }
-.pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; animation: pulse 2s ease-in-out infinite; }
+**Shell class:** `.pulse-dot` — fires automatically (infinite loop). Add to an 8px dot element.
+
+```html
+<div style="display:flex;align-items:center;gap:10px;">
+  <div class="pulse-dot"></div>
+  <span style="font-size:0.875rem;color:var(--secondary);">Live</span>
+</div>
 ```
+
+---
 
 ### 7. SVG line draw
-```css
-@keyframes draw { to { stroke-dashoffset: 0; } }
-.draw-line { stroke-dasharray: 200; stroke-dashoffset: 200; }
-.draw-line.visible { animation: draw 1s ease forwards; }
+**Shell class:** `.draw-line` — set `stroke-dasharray` to match line length. **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+```html
+<line class="draw-line" x1="0" y1="50" x2="400" y2="50"
+  stroke="var(--accent)" stroke-width="2"
+  style="stroke-dasharray:400;stroke-dashoffset:400;"/>
 ```
+
+---
 
 ### 8. Slide-in from sides
-Elements enter from the left and right simultaneously — ideal for comparison panels or two-column layouts.
-```css
-.anim-left  { opacity: 0; transform: translateX(-40px); transition: opacity 0.6s ease, transform 0.6s ease; }
-.anim-right { opacity: 0; transform: translateX( 40px); transition: opacity 0.6s ease, transform 0.6s ease; }
-.anim-left.visible, .anim-right.visible { opacity: 1; transform: translateX(0); }
+**Shell classes:** `.anim-left`, `.anim-right` — ideal for Comparison Panel columns entering simultaneously. **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+```html
+<div class="anim-left"><!-- left column --></div>
+<div class="anim-right"><!-- right column --></div>
 ```
-Apply `.anim-left` to the left column and `.anim-right` to the right column. Add the same `visible` class toggle used for `.anim`.
+
+---
 
 ### 9. Scale pop (spring entrance)
-Element scales up from nothing with a slight overshoot — more impactful than fade+slide for stat callouts and hero numbers.
-```css
-@keyframes scalePop {
-  0%   { opacity: 0; transform: scale(0.6); }
-  70%  { opacity: 1; transform: scale(1.08); }
-  100% { opacity: 1; transform: scale(1); }
-}
-.scale-pop { opacity: 0; }
-.scale-pop.visible { animation: scalePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+**Shell class:** `.scale-pop` — more impactful than fade+slide for stat callouts and hero numbers. Use sparingly — one or two elements per slide maximum. **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+```html
+<div class="scale-pop" style="font-size:6rem;font-weight:800;color:var(--accent);">42%</div>
 ```
-The cubic-bezier `(0.34, 1.56, 0.64, 1)` produces a natural spring overshoot. Use sparingly — one or two elements per slide maximum.
 
-### 10. Typewriter
-Text appears character by character using CSS `steps()`. Best for short strings (command names, key terms, one-liners).
+---
+
+### 10. Typewriter (CSS — short single-line strings)
+**Not in shell — add to slide `<style>` block.** Best for short strings (command names, key terms, one-liners). For multi-line code blocks use Pattern 14 instead.
+
 ```css
-@keyframes typing   { from { width: 0; } to { width: 100%; } }
+@keyframes typing     { from { width: 0; } to { width: 100%; } }
 @keyframes blinkCaret { 0%, 100% { border-color: transparent; } 50% { border-color: var(--accent); } }
-
 .typewriter {
-  display: inline-block;
-  overflow: hidden;
-  white-space: nowrap;
-  width: 0;
-  border-right: 2px solid var(--accent);
+  display: inline-block; overflow: hidden; white-space: nowrap;
+  width: 0; border-right: 2px solid var(--accent);
 }
 .typewriter.visible {
-  animation:
-    typing     2s steps(40, end) forwards,
-    blinkCaret 0.75s step-end 3;
+  animation: typing 2s steps(40, end) forwards, blinkCaret 0.75s step-end 3;
 }
+@media (prefers-reduced-motion: reduce) { .typewriter { width: 100%; animation: none; } }
 ```
-Adjust `steps(40)` to match the approximate character count of the string. The caret blinks 3 times then disappears. Wrap only the target string — not the full paragraph.
+
+Adjust `steps(40)` to match the character count. The caret blinks 3 times then disappears. Wrap only the target string — not the full paragraph. **Trigger: automatic** — the shell's `show()` adds `.visible` on slide enter and removes it on leave. No per-slide JS needed.
+
+---
 
 ### 11. Shimmer sweep
-An animated gradient that sweeps across a card, implying data loading or pipeline activity.
-```css
-@keyframes shimmer { to { background-position: 200% center; } }
+**Shell class:** `.shimmer` — fires automatically (infinite loop). Apply to a card or placeholder to imply loading/pipeline activity.
 
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--card) 25%,
-    rgba(255,255,255,0.07) 50%,
-    var(--card) 75%
-  );
-  background-size: 200% auto;
-  animation: shimmer 1.8s linear infinite;
-  border-radius: 12px;
-}
+```html
+<div class="shimmer" style="height:80px;"></div>
 ```
-Apply `.shimmer` to a card or placeholder element. Pair with a label like "Processing…" or "Loading data" for context. Because this loops infinitely, only use it to represent an active/ongoing state — remove the class or swap to a static card once the "loaded" state is shown.
+
+Only use for "active/loading" states — swap to a static card when the "loaded" state is shown.
+
+---
 
 ### 12. Gradient shift
-A slowly animating background gradient for title slides and section dividers that adds depth without distraction.
-```css
-@keyframes gradientShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
+**Shell class:** `.gradient-bg` — fires automatically. Apply to the title slide wrapper.
 
-.gradient-bg {
-  background: linear-gradient(135deg, #0a0a0a, #0d1f2d, #0a0a0a, #0d1a10);
-  background-size: 400% 400%;
-  animation: gradientShift 12s ease infinite;
-}
+```html
+<div id="s1" class="slide gradient-bg active">
 ```
-Apply to the slide wrapper or a decorative `div` behind the content. Use subtle dark hues offset by the accent color tint — avoid bright or saturated colors that fight the slide text.
+
+---
 
 ### 13. Border glow pulse
-A repeating box-shadow pulse that draws attention to a highlighted card without moving it.
-```css
-@keyframes borderGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); border-color: var(--border); }
-  50%       { box-shadow: 0 0 0 6px rgba(41,181,232,0.25); border-color: var(--accent); }
-}
+**Shell class:** `.glow-pulse` — fires automatically (infinite loop). Use on one card per slide maximum.
 
-.glow-pulse {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  animation: borderGlow 2s ease-in-out infinite;
-}
+```html
+<div class="card glow-pulse">...</div>
 ```
-Replace the hardcoded `rgba(41,181,232,...)` with the deck's actual accent color at 25% opacity. Use only on one card per slide — applying to multiple elements simultaneously looks cluttered.
+
+Note: the `rgba(41,181,232,...)` tint in `@keyframes borderGlow` is hardcoded to Snowflake Blue. If using a different accent, add an override in the slide's `<style>`: `@keyframes borderGlow { 50% { box-shadow: 0 0 0 6px rgba(R,G,B,0.25); } }`.
+
+---
 
 ### 14. Code block typewriter (JS — multi-line with syntax coloring)
-Character-by-character reveal that preserves syntax-highlight `<span>` coloring. Locks the container to its full-height before animating so the slide layout never shifts. A blinking accent cursor tracks the insertion point and disappears 800 ms after typing completes.
+Character-by-character reveal that preserves syntax-highlight `<span>` coloring. Locks the container to its full height before animating so the slide layout never shifts. A blinking accent cursor tracks the insertion point and disappears 800 ms after typing completes.
 
-**Required CSS** — add to the deck `<style>` block:
-```css
-@keyframes blinkCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-.tw-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  background: var(--accent);
-  vertical-align: text-bottom;
-  animation: blinkCaret 0.7s step-end infinite;
-  margin-left: 1px;
-}
-@media (prefers-reduced-motion: reduce) { .tw-cursor { animation: none; } }
-.tw-pending,
-.tw-pending span { color: transparent !important; }
-```
+**CSS pre-loaded in shell** (`.tw-cursor`, `.tw-pending`, `@keyframes blinkCaret`) — no CSS to add.
 
 **Required JS** — add once per deck, before the closing `</body>`:
 ```javascript
@@ -250,18 +241,14 @@ Key rules:
 - Use `.tw-pending` (transparent text) to hold the full-sized container during the delay, not `scrollHeight` — `scrollHeight` is unreliable for off-screen slides.
 - Lock `height` with `offsetHeight` inside the `setTimeout` callback, after the slide has been active for ≥ 600 ms. This is the only point where the measurement is guaranteed accurate.
 - Release `height` and restore `innerHTML` on slide leave so replay works cleanly.
-- Add `white-space: pre-wrap` on `.code-block` (required regardless of animation).
 - For `prefers-reduced-motion`: skip `twTypewrite`, leave `cb.innerHTML = SOURCE`.
+
+---
 
 ## Rules
 
-- All animations MUST respect `prefers-reduced-motion`:
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
-```
-- Animations fire once only (no infinite loops) unless representing an ongoing state (e.g., pulse for "live").
+- `prefers-reduced-motion` is handled by the shell for all pre-loaded classes (Patterns 1–9, 11–13). For Pattern 10, add `@media (prefers-reduced-motion: reduce) { .typewriter { width: 100%; animation: none; } }` to the slide `<style>` block.
+- Animations fire once only (no infinite loops) unless representing an ongoing state (exceptions: `.pulse-dot`, `.shimmer`, `.gradient-bg`, `.glow-pulse`).
 - Keep durations between 0.3s and 1.5s. Anything longer feels sluggish.
 - Use `ease` or `ease-out` for enters; `ease-in` for exits. Avoid `linear` for UI motion.
 - The slide must be fully readable if animations fail to run (progressive enhancement).

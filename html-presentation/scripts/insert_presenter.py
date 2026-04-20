@@ -172,7 +172,7 @@ def build_headshot_html(name: str, b64: str | None, size_css: str, icon_clamp: s
     return (
         f'<div style="{circle_style}display:flex;align-items:center;'
         f'justify-content:center;background:var(--card);">'
-        f'<span class="material-icons-round" '
+        f'<span class="material-symbols-rounded" '
         f'style="font-size:{icon_clamp};color:var(--accent);">person</span>'
         f'</div>'
     )
@@ -199,7 +199,7 @@ def build_presenter_slide(presenters: list[dict]) -> str:
             '<!-- Presenter Slide -->\n'
             '<div class="slide" id="s_presenter">\n'
             '  <div class="slide-inner">\n'
-            '    <h3 class="anim" style="font-size:16px;text-transform:uppercase;'
+            '    <h3 class="anim" style="font-size:1rem;text-transform:uppercase;'
             'letter-spacing:2px;color:var(--accent);margin-bottom:32px;">'
             'Presented By</h3>\n'
             '    <div class="anim" style="display:flex;flex-direction:column;'
@@ -235,7 +235,7 @@ def build_presenter_slide(presenters: list[dict]) -> str:
         '<!-- Presenter Slide -->\n'
         '<div class="slide" id="s_presenter">\n'
         '  <div class="slide-inner">\n'
-        f'    <h3 class="anim" style="font-size:16px;text-transform:uppercase;'
+        f'    <h3 class="anim" style="font-size:1rem;text-transform:uppercase;'
         f'letter-spacing:2px;color:var(--accent);margin-bottom:32px;">'
         f'{heading}</h3>\n'
         f'    <div class="card-grid anim stagger" style="grid-template-columns:'

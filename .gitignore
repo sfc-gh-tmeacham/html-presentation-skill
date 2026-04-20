@@ -1,5 +1,6 @@
 .snowflake/
 AGENTS.md
+adaptive-compute/
 
 # Cache directories
 __pycache__/

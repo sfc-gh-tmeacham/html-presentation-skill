@@ -95,15 +95,21 @@ The `scripts/` directory contains Python utilities that handle image processing,
 | Script | Purpose |
 |--------|---------|
 | `run_script.py` | Wrapper — creates/reuses a venv and runs any script below |
+| `generate_shell.py` | Generate the HTML shell file (CSS, nav, JS) before slide build |
+| `insert_slide.py` | Insert a subagent-generated slide draft into an `<!-- INSERT_SLIDE_N -->` marker |
+| `replace_slide.py` | Replace a fully-built slide by ID using depth-tracking HTML parsing |
 | `resize_image.py` | Resize raster images (Lanczos downscale) |
 | `img_to_base64.py` | Convert any image to a base64 data URI |
 | `screenshot_to_slide.py` | Auto-crop whitespace + resize + base64 in one step |
 | `svg_optimize.py` | Strip SVG editor metadata for smaller output |
 | `color_swap_svg.py` | Recolor SVG fills/strokes for dark backgrounds |
-| `embed_image.py` | Replace `{{IMG:...}}` placeholders in HTML with base64 data URIs |
+| `embed_image.py` | Replace `{{IMG:...}}` / `{{SVG_INLINE:...}}` placeholders with base64/inline content |
 | `insert_presenter.py` | Inject a presenter slide (resize + base64 + insert + renumber); max 9 presenters |
-| `validate_deck.py` | 27-check linter for slide IDs, accessibility, SVG sizing, icons, and more |
+| `validate_deck.py` | 31-check linter for slide IDs, accessibility, SVG sizing, icons, code blocks, and more |
 | `generate_qr_appendix.py` | Append a QR code "Resources" slide for all external links |
+| `update_icon_list.py` | Download the Material Symbols Rounded codepoints from GitHub and save to `material_symbols_names.txt` for exhaustive icon validation |
+| `subset_icons.py` | Rewrite the Material Symbols font link to subset only icons used in the deck (~295 KB → ~2 KB) |
+| `export_to_pptx.py` | Export a finished deck to PowerPoint (.pptx) with speaker notes |
 | `svg_calc.py` | Coordinate calculator for SVG diagrams (stack, grid, viewbox, markers, audit) |
 | `validate_urls.py` | Verify all external URLs in a deck are reachable |
 
@@ -133,15 +139,23 @@ html-presentaion-skill/          ← repo root
     │   └── snowflake-logo.svg
     ├── references/
     │   ├── accent-colors.md
+    │   ├── content-rules.md
     │   ├── css-animations.md
+    │   ├── export-to-pptx.md
     │   ├── graphics-embedding.md
+    │   ├── html-output-spec.md
     │   ├── material-icons.md
     │   ├── presentation-runtime.md
     │   ├── research-prompt.md
+    │   ├── slide-build-protocol.md
+    │   ├── slide-structure.md
     │   ├── validation-prompt.md
     │   └── visual-components.md
     └── scripts/
         ├── run_script.py
+        ├── generate_shell.py
+        ├── insert_slide.py
+        ├── replace_slide.py
         ├── resize_image.py
         ├── img_to_base64.py
         ├── screenshot_to_slide.py
@@ -151,6 +165,10 @@ html-presentaion-skill/          ← repo root
         ├── insert_presenter.py
         ├── validate_deck.py
         ├── generate_qr_appendix.py
+        ├── update_icon_list.py
+        ├── material_symbols_names.txt
+        ├── subset_icons.py
+        ├── export_to_pptx.py
         ├── svg_calc.py
         └── validate_urls.py
 ```

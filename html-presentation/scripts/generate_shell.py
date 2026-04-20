@@ -7,7 +7,12 @@ generate_shell.py — generate the HTML shell for a presentation deck.
 
 Reads templates/shell_template.html, substitutes the three dynamic values
 (title, accent color, slide count), optionally strips speaker-notes sections,
-then writes the output file with INSERT_SLIDE_1 ready for Phase 2 insertion.
+then writes the output file with all INSERT_SLIDE markers ready for Phase 2.
+
+By default (all-markers mode), all N markers (INSERT_SLIDE_1 through INSERT_SLIDE_N)
+are pre-generated in the shell. This enables parallel Phase 2 builds where batches
+of slide subagents generate HTML simultaneously, and the main agent inserts each
+returned slide sequentially. Pass --no-all-markers for legacy single-marker mode.
 
 Usage (via run_script.py from html-presentation/):
   python scripts/run_script.py generate_shell.py \\
@@ -15,7 +20,7 @@ Usage (via run_script.py from html-presentation/):
       --accent "#29B5E8" \\
       --slides 18 \\
       --output my-deck/my-deck-all-technical-slides.html \\
-      [--no-notes]
+      [--no-notes] [--no-all-markers]
 
 Exit codes:
   0  success — file written and all 4 shell checks passed
@@ -101,11 +106,13 @@ def strip_section_markers(html: str, keep_notes: bool) -> str:
     return SECTION_RE.sub(replacer, html)
 
 
-def validate_shell(html: str, slide_count: int, accent: str) -> list[tuple[str, str]]:
+def validate_shell(html: str, slide_count: int, accent: str, all_markers: bool = True) -> list[tuple[str, str]]:
     """Run the four required shell checks against the rendered HTML string.
 
     Checks:
-        1. INSERT_SLIDE_1 marker exists (Phase 2 edit tool depends on it).
+        1. INSERT_SLIDE markers present and correct count.
+           all_markers=True: all N markers (INSERT_SLIDE_1 through INSERT_SLIDE_N) exist.
+           all_markers=False: only INSERT_SLIDE_1 exists (legacy sequential mode).
         2. <span id="total"> is present and equals slide_count.
         3. <div class="counter"> exists (required by generate_qr_appendix.py).
         4. The accent hex value appears in the output (confirms substitution ran).
@@ -114,6 +121,8 @@ def validate_shell(html: str, slide_count: int, accent: str) -> list[tuple[str, 
         html: Fully rendered HTML string ready to be written to disk.
         slide_count: Expected total slide count from the approved plan.
         accent: Accent hex color string, e.g. "#29B5E8".
+        all_markers: When True (default), verify all N markers are present.
+            When False, only verify INSERT_SLIDE_1 exists (legacy mode).
 
     Returns:
         List of (message, hint) tuples for every failed check. Empty list
@@ -121,12 +130,23 @@ def validate_shell(html: str, slide_count: int, accent: str) -> list[tuple[str, 
     """
     failures: list[tuple[str, str]] = []
 
-    if "<!-- INSERT_SLIDE_1 -->" not in html:
-        failures.append((
-            "INSERT_SLIDE_1 marker is missing from the rendered output",
-            "This is a template corruption issue — verify templates/shell_template.html "
-            "contains '<!-- INSERT_SLIDE_1 -->' inside <div id='deck'>.",
-        ))
+    if all_markers:
+        missing = [n for n in range(1, slide_count + 1)
+                   if f"<!-- INSERT_SLIDE_{n} -->" not in html]
+        if missing:
+            failures.append((
+                f"Missing INSERT_SLIDE markers: {missing[:5]}"
+                f"{' (and more)' if len(missing) > 5 else ''}",
+                "Expected all markers INSERT_SLIDE_1 through INSERT_SLIDE_N to be "
+                "generated. Re-run generate_shell.py — marker generation may have failed.",
+            ))
+    else:
+        if "<!-- INSERT_SLIDE_1 -->" not in html:
+            failures.append((
+                "INSERT_SLIDE_1 marker is missing from the rendered output",
+                "This is a template corruption issue — verify templates/shell_template.html "
+                "contains '<!-- INSERT_SLIDE_1 -->' inside <div id='deck'>.",
+            ))
 
     total_match = re.search(r'<span\s+id="total"[^>]*>\s*(\d+)\s*</span>', html, re.IGNORECASE)
     if not total_match:
@@ -173,7 +193,10 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="Output HTML file path")
     parser.add_argument("--no-notes", dest="notes", action="store_false",
                         help="Omit speaker notes CSS, HTML, and JS")
-    parser.set_defaults(notes=True)
+    parser.add_argument("--no-all-markers", dest="all_markers", action="store_false",
+                        help="Emit only INSERT_SLIDE_1 (legacy sequential mode). "
+                             "Default is to emit all N markers for parallel batch builds.")
+    parser.set_defaults(notes=True, all_markers=True)
     args = parser.parse_args()
 
     # --- Argument validation -------------------------------------------------
@@ -244,9 +267,21 @@ def main() -> int:
             "placeholders: {{TITLE}}, {{ACCENT}}, {{SLIDE_COUNT}}.",
         )
 
+    # --- All-markers expansion ----------------------------------------------
+    # In default all_markers mode, replace the single INSERT_SLIDE_1 marker
+    # with all N markers (INSERT_SLIDE_1 through INSERT_SLIDE_N), one per line.
+    # This enables parallel Phase 2 builds where each subagent independently
+    # replaces its own marker without depending on the previous slide finishing.
+    # In legacy mode (--no-all-markers), only INSERT_SLIDE_1 remains.
+    if args.all_markers and args.slides > 1:
+        all_marker_block = "\n".join(
+            f"<!-- INSERT_SLIDE_{n} -->" for n in range(1, args.slides + 1)
+        )
+        html = html.replace("<!-- INSERT_SLIDE_1 -->", all_marker_block)
+
     # --- Validation ----------------------------------------------------------
 
-    check_failures = validate_shell(html, args.slides, args.accent)
+    check_failures = validate_shell(html, args.slides, args.accent, all_markers=args.all_markers)
     if check_failures:
         print(
             f"ERROR: Shell validation failed ({len(check_failures)} check(s)):",
@@ -278,15 +313,24 @@ def main() -> int:
     # --- Success report ------------------------------------------------------
 
     notes_status = "speaker notes ON" if args.notes else "speaker notes OFF (--no-notes)"
+    markers_status = "all-markers (parallel build)" if args.all_markers else "single-marker (sequential build)"
     print(
         f"SUCCESS: Shell written to {output} | "
-        f"slides={args.slides} | accent={args.accent} | {notes_status}"
+        f"slides={args.slides} | accent={args.accent} | {notes_status} | {markers_status}"
     )
-    print(
-        f"NEXT: Proceed to Phase 2. Use the edit tool to replace "
-        f"'<!-- INSERT_SLIDE_1 -->' in {output} with the first slide div, "
-        f"then append '<!-- INSERT_SLIDE_2 -->' (repeat for each slide)."
-    )
+    if args.all_markers:
+        print(
+            f"NEXT: Proceed to Phase 2 parallel build. All {args.slides} INSERT_SLIDE markers "
+            f"are present in {output}. Launch slide subagents in batches of 4: each subagent "
+            f"generates and RETURNS its slide HTML — do NOT edit the file. Main agent inserts "
+            f"returned HTML sequentially using the edit tool, one marker per slide."
+        )
+    else:
+        print(
+            f"NEXT: Proceed to Phase 2. Use the edit tool to replace "
+            f"'<!-- INSERT_SLIDE_1 -->' in {output} with the first slide div, "
+            f"then append '<!-- INSERT_SLIDE_2 -->' (repeat for each slide)."
+        )
     return 0
 
 

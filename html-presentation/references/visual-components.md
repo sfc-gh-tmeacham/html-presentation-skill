@@ -48,18 +48,16 @@ Every slide MUST use at least one of these components. Text-only slides are not 
 2–4 cards in a row, each with an icon, title, and one-line description.
 Use for: features, benefits, categories.
 
+**Shell classes:** `.card-grid`, `.card` — pre-loaded, no CSS to add.
+
 ```html
 <div class="card-grid anim stagger">
   <div class="card">
-    <span class="material-icons-round" style="color:var(--accent);font-size:32px;">icon_name</span>
+    <span class="material-symbols-rounded" style="color:var(--accent);font-size:2rem;">icon_name</span>
     <h4>Title</h4>
     <p>One-line description.</p>
   </div>
 </div>
-```
-```css
-.card-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; width: 100%; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; text-align: center; }
 ```
 
 ---
@@ -68,8 +66,10 @@ Use for: features, benefits, categories.
 Two columns side by side with a divider.
 Use for: old vs new, before vs after, tool A vs tool B.
 
+**Shell class:** `.comparison-panel` — pre-loaded, no CSS to add.
+
 ```html
-<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:32px;align-items:start;width:100%;">
+<div class="comparison-panel">
   <div class="card"><h4>Option A</h4><ul class="icon-list" style="list-style:none;padding:0;text-align:left;">...</ul></div>
   <div style="width:1px;background:var(--border);align-self:stretch;"></div>
   <div class="card"><h4>Option B</h4><ul class="icon-list" style="list-style:none;padding:0;text-align:left;">...</ul></div>
@@ -84,8 +84,8 @@ Use for: impressive data points, growth numbers, costs.
 
 ```html
 <div class="anim" style="text-align:center;">
-  <div style="font-size:96px;font-weight:800;color:var(--accent);line-height:1;">42%</div>
-  <p style="font-size:22px;color:var(--secondary);margin-top:8px;">Label text</p>
+  <div style="font-size:6rem;font-weight:800;color:var(--accent);line-height:1;">42%</div>
+  <p style="font-size:1.375rem;color:var(--secondary);margin-top:8px;">Label text</p>
 </div>
 ```
 
@@ -96,13 +96,13 @@ Numbered steps with arrows between them.
 Use for: processes, tutorials, how-it-works.
 
 ```html
-<div style="display:flex;align-items:center;gap:16px;width:100%;">
-  <div class="card" style="flex:1;text-align:center;">
-    <div style="font-size:32px;font-weight:700;color:var(--accent);">01</div>
+<div class="step-flow">
+  <div class="card">
+    <div style="font-size:2rem;font-weight:700;color:var(--accent);">01</div>
     <h4>Step Name</h4>
-    <p style="font-size:14px;">Description</p>
+    <p style="font-size:0.875rem;">Description</p>
   </div>
-  <span class="material-icons-round" style="color:var(--accent);font-size:32px;">arrow_forward</span>
+  <span class="material-symbols-rounded" style="color:var(--accent);font-size:2rem;">arrow_forward</span>
   <!-- repeat -->
 </div>
 ```
@@ -138,7 +138,7 @@ Use for: feature lists, checklists, requirements.
 ```html
 <ul class="icon-list anim stagger" style="list-style:none;padding:0;text-align:left;">
   <li style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-    <span class="material-icons-round" style="color:var(--accent);">check_circle</span>
+    <span class="material-symbols-rounded" style="color:var(--accent);">check_circle</span>
     <span>Item label</span>
   </li>
 </ul>
@@ -150,27 +150,13 @@ Use for: feature lists, checklists, requirements.
 Monospace text on a dark card with syntax-style coloring.
 Use for: code examples, command line, config files.
 
-**`white-space: pre-wrap` is required** — without it, all code collapses to a single line.
+**Shell class:** `.code-block` — pre-loaded (with `.kw`, `.str`, `.var`, `.cm` token spans). No CSS to add. `white-space: pre-wrap` is included in the shell definition.
 
-```css
-.code-block {
-  background: #111;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px 28px;
-  text-align: left;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 16px;
-  line-height: 1.7;
-  color: #e0e0e0;
-  overflow-x: auto;
-  width: 100%;
-  white-space: pre-wrap; /* REQUIRED — preserves indentation and line breaks */
-}
-.code-block .kw  { color: var(--accent); font-weight: 600; }
-.code-block .str { color: #10B981; }
-.code-block .var { color: #F59E0B; }
-.code-block .cm  { color: #555; font-style: italic; }
+**CRITICAL — no newline after opening tag:** Because `.code-block` uses `white-space: pre-wrap`, any newline between the closing `>` of the opening tag and the first content character renders as a visible blank line at the top of the code block. The first `<span>` (or text node) MUST be on the same line as the opening tag's closing `>`:
+```
+Correct:  <div id="cbN" class="code-block" ...><span class="cm">-- comment</span>
+Wrong:    <div id="cbN" class="code-block" ...>
+          <span class="cm">-- comment</span>
 ```
 
 Wrap tokens in `<span class="kw">`, `<span class="str">`, `<span class="var">`, `<span class="cm">`.
@@ -208,8 +194,8 @@ Use for: history, roadmap, project phases.
   <div style="display:flex;justify-content:space-between;position:relative;">
     <div style="text-align:center;">
       <div style="width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 auto 12px;"></div>
-      <p style="font-size:14px;font-weight:600;">Label</p>
-      <p style="font-size:12px;color:var(--secondary);">Date or detail</p>
+      <p style="font-size:0.875rem;font-weight:600;">Label</p>
+      <p style="font-size:0.75rem;color:var(--secondary);">Date or detail</p>
     </div>
   </div>
 </div>
@@ -225,7 +211,7 @@ Use for: screenshots, diagrams, product photos.
 <div class="anim" style="text-align:center;">
   <img src="{{IMG:path/to/image.png}}" alt="Description"
     style="max-width:600px;max-height:360px;border-radius:12px;display:block;margin:0 auto;">
-  <p style="font-size:15px;color:var(--secondary);margin-top:12px;">Caption text</p>
+  <p style="font-size:0.9375rem;color:var(--secondary);margin-top:12px;">Caption text</p>
 </div>
 ```
 
@@ -235,11 +221,13 @@ Use for: screenshots, diagrams, product photos.
 3–4 stat boxes in a row.
 Use for: KPIs, performance data, comparisons.
 
+Uses the shell's `.card-grid` + `.card` classes (same grid as Card Grid). Override column count inline for 4 boxes: `style="grid-template-columns:repeat(4,1fr)"`.
+
 ```html
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;width:100%;">
-  <div class="card anim" style="text-align:center;">
-    <div style="font-size:52px;font-weight:800;color:var(--accent);">99%</div>
-    <p style="font-size:15px;color:var(--secondary);margin-top:6px;">Metric Label</p>
+<div class="card-grid anim stagger">
+  <div class="card" style="text-align:center;">
+    <div style="font-size:3.25rem;font-weight:800;color:var(--accent);">99%</div>
+    <p style="font-size:0.9375rem;color:var(--secondary);margin-top:6px;">Metric Label</p>
   </div>
 </div>
 ```
@@ -357,7 +345,7 @@ Use for: feature matrices, multi-column comparisons, spec sheets, data grids.
 
 ```html
 <div class="anim" style="width:100%;overflow-x:auto;">
-  <table style="width:100%;border-collapse:collapse;font-size:16px;">
+  <table style="width:100%;border-collapse:collapse;font-size:1rem;">
     <thead>
       <tr>
         <th style="padding:12px 16px;text-align:left;border-bottom:2px solid var(--accent);color:var(--accent);font-weight:600;">Column A</th>
@@ -382,7 +370,7 @@ Use for: feature matrices, multi-column comparisons, spec sheets, data grids.
 </div>
 ```
 
-Accent-color the header row bottom border. Alternate `rgba(255,255,255,0.03)` row shading for readability. Use `<span class="material-icons-round" style="color:#10B981;font-size:18px;">check</span>` / `<span style="color:#EF4444;">✗</span>` for yes/no cells.
+Accent-color the header row bottom border. Alternate `rgba(255,255,255,0.03)` row shading for readability. Use `<span class="material-symbols-rounded" style="color:#10B981;font-size:1.125rem;">check</span>` / `<span style="color:#EF4444;">✗</span>` for yes/no cells.
 
 ---
 
@@ -390,14 +378,16 @@ Accent-color the header row bottom border. Alternate `rgba(255,255,255,0.03)` ro
 General-purpose split slide: content on the left, visual on the right (or vice versa).
 Use for: concept + diagram, list + screenshot, text + chart, any "explain and show" pairing.
 
+**Shell class:** `.two-col` — pre-loaded (`1fr 1fr`, 48px gap, vertically centered). Override `grid-template-columns` inline for asymmetric splits (e.g. `style="grid-template-columns:2fr 3fr"`).
+
 ```html
-<div class="anim" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%;">
+<div class="two-col anim">
   <div>
-    <h2 style="font-size:36px;margin-bottom:16px;">Left Heading</h2>
-    <p style="font-size:18px;color:var(--secondary);line-height:1.6;">Supporting text or list goes here.</p>
+    <h2 style="font-size:2.25rem;margin-bottom:16px;">Left Heading</h2>
+    <p style="font-size:1.125rem;color:var(--secondary);line-height:1.6;">Supporting text or list goes here.</p>
     <ul class="icon-list" style="list-style:none;padding:0;margin-top:16px;text-align:left;">
       <li style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-        <span class="material-icons-round" style="color:var(--accent);">check_circle</span>
+        <span class="material-symbols-rounded" style="color:var(--accent);">check_circle</span>
         <span>Key point</span>
       </li>
     </ul>
@@ -418,22 +408,22 @@ Use for: next steps, sign-ups, links to resources, closing a presentation.
 
 ```html
 <div class="anim" style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:28px;">
-  <h2 style="font-size:52px;font-weight:800;">Ready to get started?</h2>
-  <p style="font-size:20px;color:var(--secondary);max-width:560px;line-height:1.6;">Supporting one-liner that reinforces the call to action.</p>
+  <h2 style="font-size:3.25rem;font-weight:800;">Ready to get started?</h2>
+  <p style="font-size:1.25rem;color:var(--secondary);max-width:560px;line-height:1.6;">Supporting one-liner that reinforces the call to action.</p>
   <a href="https://example.com" target="_blank" rel="noopener"
     style="display:inline-block;padding:16px 40px;background:var(--accent);color:#000;
-    font-weight:700;font-size:18px;border-radius:40px;border-bottom:none;
+    font-weight:700;font-size:1.125rem;border-radius:40px;border-bottom:none;
     transition:opacity 0.2s;cursor:pointer;"
     onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
     Button Label
   </a>
   <div style="display:flex;gap:32px;flex-wrap:wrap;justify-content:center;margin-top:8px;">
     <a href="https://example.com" target="_blank" rel="noopener"
-      style="font-size:15px;color:var(--secondary);border-bottom:1px solid var(--border);">
+      style="font-size:0.9375rem;color:var(--secondary);border-bottom:1px solid var(--border);">
       Resource Link 1
     </a>
     <a href="https://example.com" target="_blank" rel="noopener"
-      style="font-size:15px;color:var(--secondary);border-bottom:1px solid var(--border);">
+      style="font-size:0.9375rem;color:var(--secondary);border-bottom:1px solid var(--border);">
       Resource Link 2
     </a>
   </div>
@@ -453,10 +443,10 @@ Use for: important caveats, feature flags, "before you begin" notices, pro tips.
   background:rgba(41,181,232,0.1);border:1px solid rgba(41,181,232,0.35);
   border-left:4px solid var(--accent);border-radius:12px;
   padding:20px 24px;width:100%;max-width:800px;margin:16px auto;">
-  <span class="material-icons-round" style="color:var(--accent);font-size:24px;flex-shrink:0;margin-top:2px;">info</span>
+  <span class="material-symbols-rounded" style="color:var(--accent);font-size:1.5rem;flex-shrink:0;margin-top:2px;">info</span>
   <div>
-    <p style="font-weight:600;font-size:16px;margin-bottom:4px;">Banner Title</p>
-    <p style="font-size:15px;color:var(--secondary);line-height:1.5;">Supporting detail text for the callout.</p>
+    <p style="font-weight:600;font-size:1rem;margin-bottom:4px;">Banner Title</p>
+    <p style="font-size:0.9375rem;color:var(--secondary);line-height:1.5;">Supporting detail text for the callout.</p>
   </div>
 </div>
 ```
@@ -480,14 +470,14 @@ Use for: tech stacks, product feature tags, supported platforms, skill sets.
   <span style="display:inline-flex;align-items:center;gap:6px;
     padding:8px 18px;border-radius:999px;
     background:rgba(41,181,232,0.12);border:1px solid rgba(41,181,232,0.3);
-    font-size:15px;font-weight:500;color:var(--accent);">
-    <span class="material-icons-round" style="font-size:16px;">code</span>
+    font-size:0.9375rem;font-weight:500;color:var(--accent);">
+    <span class="material-symbols-rounded" style="font-size:1rem;">code</span>
     Python
   </span>
   <span style="display:inline-flex;align-items:center;gap:6px;
     padding:8px 18px;border-radius:999px;
     background:rgba(255,255,255,0.06);border:1px solid var(--border);
-    font-size:15px;font-weight:500;color:var(--text);">
+    font-size:0.9375rem;font-weight:500;color:var(--text);">
     SQL
   </span>
   <!-- repeat for each tag -->
@@ -563,8 +553,10 @@ Use for: quarterly comparisons, ranked values, before/after metrics.
 CSS flexbox bars sized by percentage width. Best when category labels are long or there are more than 5 categories.
 Use for: ranking lists, survey results, feature adoption, multi-category comparisons.
 
+**Shell class:** `.chart-h` — pre-loaded, no CSS to add.
+
 ```html
-<div class="anim stagger chart-h" style="display:flex;flex-direction:column;gap:14px;width:100%;">
+<div class="anim stagger chart-h">
   <div style="display:flex;align-items:center;gap:16px;">
     <span style="min-width:120px;text-align:right;font-size:0.85rem;color:var(--secondary);">Category A</span>
     <div style="flex:1;height:28px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
@@ -680,22 +672,7 @@ Use for: part-to-whole proportions, market share, budget allocation (2–5 segme
 
 Use for the opening slide of any deck. Features an animated gradient background, ambient glow orbs, the Snowflake logo, and a center-stacked heading group.
 
-**Required CSS** — add to the deck's `<style>` block:
-
-```css
-@keyframes gradientShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-.gradient-bg {
-  background: linear-gradient(135deg, #0a0a0a, #0d1f2d, #0a0a0a, #0d1a10);
-  background-size: 400% 400%;
-  animation: gradientShift 12s ease infinite;
-}
-```
-
-**Apply to the slide div:**
+**Shell class:** `.gradient-bg` — pre-loaded, no CSS to add. Apply directly:
 
 ```html
 <div id="s1" class="slide gradient-bg active">
@@ -736,7 +713,7 @@ Use for the opening slide of any deck. Features an animated gradient background,
 ```
 
 **Key style decisions:**
-- `gradient-bg` class drives the slow animated background — add the CSS above to every deck that uses this layout
+- `gradient-bg` class drives the slow animated background — pre-loaded in shell, no CSS needed
 - Gradient text on `h2` uses `background:linear-gradient(135deg,#ffffff 40%,#29B5E8)` with `-webkit-background-clip:text` — white bleeds into Snowflake blue
 - Glow orbs use `position:absolute` with `pointer-events:none` so they don't block clicks; place them inside the slide div before `.slide-inner`
 - Accent divider is 60 × 3px — use it between the subtitle and tagline to add visual rhythm

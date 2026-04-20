@@ -27,6 +27,7 @@ Step 2: For each reported issue, apply the fix using the Edit tool with the exac
   - Bulleted lists: must use `text-align: left` even inside centered containers
   - SVG stacked rects: `y_N + height_N + 10 < y_(N+1)` (no overlapping, 10px min gap)
   - No `display:none` for slide transitions — use `opacity` + `pointer-events` only
+  - Code blocks: first content must be on the same line as the `<div class="code-block">` opening tag — a leading newline renders as a visible blank line due to `white-space: pre-wrap`
 
 Step 3: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
 

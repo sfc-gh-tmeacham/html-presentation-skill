@@ -1,10 +1,23 @@
+<!-- 
+   ______                __           __            _ __  __  
+  / ____/_______  ____ _/ /____  ____/ /  _      __(_) /_/ /_ 
+ / /   / ___/ _ \/ __ `/ __/ _ \/ __  /  | | /| / / / __/ __ \
+/ /___/ /  /  __/ /_/ / /_/  __/ /_/ /   | |/ |/ / / /_/ / / /
+\____/_/_  \___/\__,_/\__/\___/\__,_/____|__/|__/_/\__/_/ /_/ 
+  / ____/___  _____/ /____  _  __   / ____/___  ____/ /__     
+ / /   / __ \/ ___/ __/ _ \| |/_/  / /   / __ \/ __  / _ \    
+/ /___/ /_/ / /  / /_/  __/>  <   / /___/ /_/ / /_/ /  __/    
+\____/\____/_/   \__/\___/_/|_|   \____/\____/\__,_/\___/     
+
+https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{TITLE}}</title>
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded&display=block" rel="stylesheet">
   <style>
     :root {
       --accent: {{ACCENT}};
@@ -60,6 +73,74 @@
     .nbtn { cursor: pointer; color: var(--text); font-size: 1rem; padding: 0 4px; transition: color 0.2s; user-select: none; }
     .nbtn:hover { color: var(--accent); }
     #notes-hint { font-size: 0.72rem; color: #555; margin-left: 4px; }
+    /* BEGIN_COMPONENT_CSS */
+    .anim { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .slide.active .anim { opacity: 1; transform: translateY(0); }
+    .stagger > *:nth-child(1) { transition-delay: 0s; }
+    .stagger > *:nth-child(2) { transition-delay: 0.1s; }
+    .stagger > *:nth-child(3) { transition-delay: 0.2s; }
+    .stagger > *:nth-child(4) { transition-delay: 0.3s; }
+    .stagger > *:nth-child(5) { transition-delay: 0.4s; }
+    .stagger > *:nth-child(6) { transition-delay: 0.5s; }
+    @media (prefers-reduced-motion: reduce) {
+      .anim, .anim-left, .anim-right { transition: none; opacity: 1; transform: none; }
+      .scale-pop.visible { animation: none; opacity: 1; }
+      .progress-fill, .ring-fill { transition: none; }
+      .draw-line.visible { animation: none; stroke-dashoffset: 0; }
+      .pulse-dot::after, .shimmer, .glow-pulse, .tw-cursor, .gradient-bg { animation: none; }
+    }
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .gradient-bg {
+      background: linear-gradient(135deg, #0a0a0a, #0d1f2d, #0a0a0a, #0d1a10);
+      background-size: 400% 400%;
+      animation: gradientShift 12s ease infinite;
+    }
+    .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; text-align: center; }
+    .icon-list { list-style: none; padding: 0; text-align: left; }
+    .icon-list li { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .code-block { background: #111; border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; text-align: left; font-family: 'SF Mono','Fira Code','Consolas',monospace; font-size: 1rem; line-height: 1.7; color: #e0e0e0; overflow-x: auto; width: 100%; white-space: pre-wrap; }
+    .code-block .kw  { color: var(--accent); font-weight: 600; }
+    .code-block .str { color: #10B981; }
+    .code-block .var { color: #F59E0B; }
+    .code-block .cm  { color: #555; font-style: italic; }
+    .step-flow { display: flex; align-items: center; gap: 16px; width: 100%; }
+    .step-flow .card { flex: 1; text-align: center; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; width: 100%; }
+    .comparison-panel { display: grid; grid-template-columns: 1fr auto 1fr; gap: 32px; align-items: start; width: 100%; }
+    .chart-h { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+    .progress-fill { width: 0; transition: width 1s ease; }
+    .progress-fill.visible { width: var(--target-width); }
+    .ring-fill { stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 1.2s ease; }
+    .ring-fill.visible { stroke-dashoffset: var(--target-offset); }
+    @property --num { syntax: '<integer>'; initial-value: 0; inherits: false; }
+    .counter { --num: 0; transition: --num 1.5s ease; counter-reset: num var(--num); font-variant-numeric: tabular-nums; }
+    .counter::after { content: counter(num); }
+    .counter.visible { --num: var(--target); }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.8); } }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); position: relative; }
+    .pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; animation: pulse 2s ease-in-out infinite; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    .draw-line { stroke-dasharray: 200; stroke-dashoffset: 200; }
+    .draw-line.visible { animation: draw 1s ease forwards; }
+    .anim-left  { opacity: 0; transform: translateX(-40px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .anim-right { opacity: 0; transform: translateX( 40px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .anim-left.visible, .anim-right.visible { opacity: 1; transform: translateX(0); }
+    @keyframes scalePop { 0% { opacity: 0; transform: scale(0.6); } 70% { opacity: 1; transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
+    .scale-pop { opacity: 0; }
+    .scale-pop.visible { animation: scalePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+    @keyframes shimmer { to { background-position: 200% center; } }
+    .shimmer { background: linear-gradient(90deg, var(--card) 25%, rgba(255,255,255,0.07) 50%, var(--card) 75%); background-size: 200% auto; animation: shimmer 1.8s linear infinite; border-radius: 12px; }
+    @keyframes borderGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); border-color: var(--border); } 50% { box-shadow: 0 0 0 6px rgba(41,181,232,0.25); border-color: var(--accent); } }
+    .glow-pulse { border: 1px solid var(--border); border-radius: 16px; animation: borderGlow 2s ease-in-out infinite; }
+    @keyframes blinkCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    .tw-cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: text-bottom; animation: blinkCaret 0.7s step-end infinite; margin-left: 1px; }
+    .tw-pending, .tw-pending span { color: transparent !important; }
+    /* END_COMPONENT_CSS */
     /* BEGIN_NOTES_CSS */
     #deck.panel-open { height: calc(100vh - 180px); }
     #notes-panel {
@@ -156,12 +237,12 @@
         body{background:#111;color:#e0e0e0;
           font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
           Helvetica,Arial,sans-serif;padding:28px 32px;margin:0;}
-        #noteSlide{font-size:13px;text-transform:uppercase;
+        #noteSlide{font-size:0.8125rem;text-transform:uppercase;
           letter-spacing:1.5px;color:var(--accent,#3B82F6);
           margin-bottom:16px;font-weight:600;}
-        #noteText{font-size:20px;line-height:1.65;color:#d0d0d0;}
+        #noteText{font-size:1.25rem;line-height:1.65;color:#d0d0d0;}
         .hint{position:fixed;bottom:16px;right:20px;
-          font-size:12px;color:#555;}
+          font-size:0.75rem;color:#555;}
         </style></head><body>
         <div id="noteSlide"></div>
         <div id="noteText"></div>
@@ -174,10 +255,16 @@
     document.getElementById('notes-panel-close').addEventListener('click', closeNotesPanel);
     // END_NOTES_JS
 
+    const ANIM_SEL = '.anim-left,.anim-right,.scale-pop,.draw-line,.progress-fill,.ring-fill,.counter,.typewriter';
     function show(n) {
-      slides[current].classList.remove('active');
+      const prev = current;
+      slides[prev].classList.remove('active');
+      slides[prev].querySelectorAll(ANIM_SEL).forEach(el => el.classList.remove('visible'));
       current = (n + slides.length) % slides.length;
       slides[current].classList.add('active');
+      requestAnimationFrame(() =>
+        slides[current].querySelectorAll(ANIM_SEL).forEach(el => el.classList.add('visible'))
+      );
       document.getElementById('curr').textContent = current + 1;
       // BEGIN_SHOW_UPDATES
       updateNotesWindow();
