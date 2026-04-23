@@ -225,7 +225,7 @@ def build_presenter_slide(presenters: list[dict]) -> str:
             f'    <div class="card" style="text-align:center;padding:28px 24px;">\n'
             f'      {headshot}\n'
             f'      <h4 style="font-size:clamp(1.1rem,2vw,1.5rem);margin-top:12px;margin-bottom:4px;">{escape(p["name"])}</h4>\n'
-            f'      <p style="font-size:clamp(0.875rem,1.3vw,1.125rem);color:var(--secondary);">{escape(p["title"])}</p>\n'
+            f'      <p style="font-size:clamp(1rem,1.4vw,1.25rem);color:var(--secondary);">{escape(p["title"])}</p>\n'
             f'    </div>'
         )
     cards_html = "\n".join(cards)

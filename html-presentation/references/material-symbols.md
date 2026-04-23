@@ -1,4 +1,4 @@
-# Material Icons Reference
+# Material Symbols Reference
 
 All icons use the `material-symbols-rounded` font class:
 ```html
@@ -9,9 +9,34 @@ Do not invent icon names. If a concept is not in the recommended list below, ver
 
 ---
 
+## Variable Font Axes
+
+Material Symbols is a variable font. The shell sets these defaults via `.material-symbols-rounded` CSS:
+
+| Axis | Shell default | Range | Effect |
+|------|--------------|-------|--------|
+| `FILL` | `1` | 0–1 | 0 = outlined, 1 = filled |
+| `wght` | `400` | 100–700 | stroke weight (thicker = higher) |
+| `GRAD` | `0` | -50–200 | visual grade / contrast |
+| `opsz` | `24` | 20–48 | optical size (use 20 for small, 48 for large) |
+
+**Icons default to filled** (`FILL:1`). Override per icon with inline `font-variation-settings`:
+
+```html
+<!-- outlined icon (de-emphasis) -->
+<span class="material-symbols-rounded" style="color:var(--accent);font-size:1.5rem;font-variation-settings:'FILL' 0;">check_circle</span>
+
+<!-- heavy filled icon (hero callout) -->
+<span class="material-symbols-rounded" style="color:var(--accent);font-size:2rem;font-variation-settings:'FILL' 1,'wght' 600;">bolt</span>
+```
+
+Only override when the visual distinction matters. Most icons look best with the shell default.
+
+---
+
 ## Blacklisted Icons
 
-The following names render incorrectly or do not exist in the Material Icons Round font. MUST NOT be used.
+The following names render incorrectly or do not exist in the Material Symbols Rounded font. MUST NOT be used.
 
 | Blocked icon | Problem | Use instead |
 |---|---|---|

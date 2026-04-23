@@ -57,8 +57,8 @@ BLUF: 2–4 cards, each: headline (bold white) + elaboration (secondary) + accen
 4. Consistent accent color throughout
 5. No bullet dumps — use Icon+Label List
 6. Big text beats small text
-7. Fill viewport: `max-width:min(1200px,92vw)`, `clamp()` padding. Balanced density, not clutter
-8. Material Symbols not emojis. Endpoint: `css2?family=Material+Symbols+Rounded`. Class: `material-symbols-rounded`
+7. Fill viewport: `max-width:min(1600px,96vw)`, `clamp()` padding. Balanced density, not clutter
+8. Material Symbols not emojis. Endpoint: `css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200`. Class: `material-symbols-rounded`. Default: filled (`FILL:1`). Outline override: `style="font-variation-settings:'FILL' 0;"`
 9. CSS animations on primary content. No infinite loops on static. Respect `prefers-reduced-motion`
 10. CSS illustrations, SVG shapes, gradients for visuals. All inline. Total <2MB, images <500KB
 11. No double bullets: icon/symbol `<li>` → parent `<ul>` needs `list-style:none;padding:0;`
@@ -87,17 +87,17 @@ Slide structure:
   <!-- optional: <div class="speaker-notes">...</div> -->
 </div>
 ```
-`.slide-inner` = padding `clamp(1.65rem,4.4vh,3.85rem) clamp(1.65rem,5.5vw,4.4rem)`, `max-width:min(1320px,95vw)`. Exception: ANY slide may place ambient glow orb divs as direct children BEFORE `.slide-inner` (add `overflow:hidden` to the `.slide` div, use percentage-based coords, set `z-index:0` on orbs and `z-index:1` on `.slide-inner`). NEVER place orbs inside `.slide-inner`.
+`.slide-inner` = padding `clamp(1rem,3.5vh,2.75rem) clamp(1rem,3.5vw,3rem)`, `max-width:min(1600px,96vw)`. Exception: ANY slide may place ambient glow orb divs as direct children BEFORE `.slide-inner` (add `overflow:hidden` to the `.slide` div, use percentage-based coords, set `z-index:0` on orbs and `z-index:1` on `.slide-inner`). NEVER place orbs inside `.slide-inner`.
 
 CSS vars: `--bg:#0a0a0a`, `--text:#fff`, `--secondary:#a0a0a0`, `--card:#1a1a1a`, `--border:#2a2a2a`, `--accent` per deck.
 
 Typography (relative units only, no px for font-size):
-- H2: `clamp(2.75rem,4.4vw,4.4rem)`
-- H3 eyebrow: `clamp(0.935rem,1.32vw,1.1rem)`
-- Body/li: `clamp(1.1rem,1.76vw,1.65rem)`
+- H2: `clamp(2.75rem,4.4vw,5rem)`
+- H3 eyebrow: `clamp(1rem,1.5vw,1.35rem)`
+- Body/li: `clamp(1.2rem,1.9vw,2rem)`
 - Stats: `clamp(4.4rem,7.7vw,6.6rem)` accent
-- Code: `clamp(0.96rem,1.32vw,1.24rem)` mono
-- Captions: `clamp(0.825rem,1.1vw,0.99rem)`
+- Code: `clamp(1rem,1.4vw,1.35rem)` mono
+- Captions: `clamp(0.875rem,1.2vw,1.1rem)`
 
 Spacing: `vh`/`vw`/`rem`. `px` only for border-width, border-radius, letter-spacing.
 
@@ -113,7 +113,7 @@ Speaker notes: `<div class="speaker-notes">` inside slide. `N`=popup, `B`=panel.
 
 Every slide MUST use ≥1 component. External links: `target="_blank" rel="noopener"`. Lists: `text-align:left`. Connectors: `var(--accent)` or bright color, NEVER `var(--border)` or dark gray.
 
-**Icon reference:** See `references/material-icons.md` for full curated icon list by concept/industry. Do not invent names — verify at fonts.google.com/icons if not in list.
+**Icon reference:** See `references/material-symbols.md` for full curated icon list by concept/industry. Do not invent names — verify at fonts.google.com/icons if not in list.
 
 **Blacklisted icons** (render broken): `settings_off` (use `toggle_off`/`block`), `docker` (use `inventory_2`/`dns`).
 
@@ -155,7 +155,7 @@ Shell: `.step-flow` (MUST use for validator Check #10)
   <div class="card">
     <div style="font-size:2rem;font-weight:700;color:var(--accent);">01</div>
     <h4>Step Name</h4>
-    <p style="font-size:0.875rem;">Description</p>
+    <p style="font-size:1rem;">Description</p>
   </div>
   <span class="material-symbols-rounded" style="color:var(--accent);font-size:2rem;">arrow_forward</span>
 </div>
@@ -166,8 +166,8 @@ Needs `<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wgh
 ```html
 <div class="card anim" style="padding:clamp(14px,2vh,22px) clamp(16px,2vw,24px) clamp(14px,2vh,22px);position:relative;">
   <div aria-hidden="true" style="position:absolute;top:-2px;left:10px;font-size:clamp(3.5rem,5.5vw,5rem);color:var(--accent);opacity:0.65;font-family:'Playfair Display',Georgia,'Times New Roman',serif;line-height:1;pointer-events:none;user-select:none;">&ldquo;</div>
-  <p style="font-style:italic;font-size:clamp(0.88rem,1.25vw,1.12rem);line-height:1.65;color:var(--text);margin-top:clamp(28px,3.5vh,40px);">Quote text here.</p>
-  <p style="font-size:clamp(0.78rem,1.05vw,0.95rem);color:var(--secondary);margin-top:10px;">— Attribution Name, Title, Organization</p>
+  <p style="font-style:italic;font-size:clamp(1rem,1.4vw,1.25rem);line-height:1.65;color:var(--text);margin-top:clamp(28px,3.5vh,40px);">Quote text here.</p>
+  <p style="font-size:clamp(0.875rem,1.15vw,1.05rem);color:var(--secondary);margin-top:10px;">— Attribution Name, Title, Organization</p>
 </div>
 ```
 
@@ -199,8 +199,8 @@ Shell: `.timeline` (MUST use for validator Check #10)
   <div style="display:flex;justify-content:space-between;position:relative;">
     <div style="text-align:center;">
       <div style="width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 auto 12px;"></div>
-      <p style="font-size:0.875rem;font-weight:600;">Label</p>
-      <p style="font-size:0.75rem;color:var(--secondary);">Date or detail</p>
+      <p style="font-size:1rem;font-weight:600;">Label</p>
+      <p style="font-size:0.875rem;color:var(--secondary);">Date or detail</p>
     </div>
   </div>
 </div>
@@ -246,7 +246,7 @@ Shell: `.two-col` (MUST use for validator Check #10). Override: `grid-template-c
   background:rgba(41,181,232,0.1);border:1px solid rgba(41,181,232,0.35);
   border-left:4px solid var(--accent);border-radius:12px;
   padding:20px 24px;width:100%;max-width:800px;margin:16px auto;">
-  <span class="material-symbols-rounded" style="color:var(--accent);font-size:1.5rem;flex-shrink:0;margin-top:2px;">info</span>
+  <span class="material-symbols-rounded" style="color:var(--accent);font-size:1.75rem;flex-shrink:0;margin-top:2px;">info</span>
   <div>
     <p style="font-weight:600;font-size:1rem;margin-bottom:4px;">Banner Title</p>
     <p style="font-size:0.9375rem;color:var(--secondary);line-height:1.5;">Detail text.</p>
@@ -260,7 +260,7 @@ Swap icon/color: info=accent, warning=`#F59E0B`, error=`#EF4444`, success=`#10B9
 <div class="anim" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:16px;">
   <span style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:999px;
     background:rgba(41,181,232,0.12);border:1px solid rgba(41,181,232,0.3);
-    font-size:0.9375rem;font-weight:500;color:var(--accent);">
+    font-size:1rem;font-weight:500;color:var(--accent);">
     <span class="material-symbols-rounded" style="font-size:1rem;">code</span> Python
   </span>
 </div>
@@ -269,7 +269,7 @@ Swap icon/color: info=accent, warning=`#F59E0B`, error=`#EF4444`, success=`#10B9
 ### Table
 ```html
 <div class="anim" style="width:100%;overflow-x:auto;">
-  <table style="width:100%;border-collapse:collapse;font-size:1rem;">
+  <table style="width:100%;border-collapse:collapse;font-size:1.125rem;">
     <thead>
       <tr>
         <th style="padding:12px 16px;text-align:left;border-bottom:2px solid var(--accent);color:var(--accent);font-weight:600;">Col</th>

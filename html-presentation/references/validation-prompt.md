@@ -32,9 +32,6 @@ Step 2: For each reported issue, apply the fix using the Edit tool with the exac
   - Slide wrapper: direct child of `.slide` MUST be `.slide-inner` (unless slide uses `gradient-bg`)
   - Dark theme: do not hardcode light backgrounds (`#fff`, `white`) or dark text colors (`#1e293b`, `#475569`, etc.) inside slides — use CSS variables
 
-Step 3: After fixing any icon class error (wrong class or missing icon), re-run `subset_icons.py <deck>` before the next validate run:
-  python scripts/run_script.py subset_icons.py [folder]/[topic-slug]-[audience-slug]-slides.html
-
-Step 4: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
+Step 3: Re-run the validator with --context 5. Repeat until it passes or until you have made 3 fix attempts.
 
 Return a one-line summary: "PASS — N slides, all checks clean" or "Fixed N issues: [brief list]". If validation still fails after 3 attempts, list the remaining errors.

@@ -124,7 +124,7 @@ VALID_SYMBOL_NAMES: frozenset[str] = (
 )
 
 MAX_FILE_SIZE = 20 * 1024 * 1024
-MAX_WORDS_PER_SLIDE = 30
+MAX_WORDS_PER_SLIDE = 100
 MAX_QR_PER_SLIDE = 6
 MIN_SVG_VH = 58
 SVG_CHAR_WIDTH = 0.65
@@ -164,29 +164,29 @@ VISUAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
 ]]
 
 SLIDE_RE = re.compile(
-    r'<div\b(?=[^>]*\bclass="slide)(?=[^>]*\bid="s(\d+)")',
+    r'<div\b(?=[^>]*\bclass=["\']slide)(?=[^>]*\bid=["\']s(\d+)["\'])',
     re.IGNORECASE,
 )
 SLIDE_ALL_RE = re.compile(
-    r'<div\b(?=[^>]*\bclass="slide)(?=[^>]*\bid="(s[^"]+)")',
+    r'<div\b(?=[^>]*\bclass=["\']slide)(?=[^>]*\bid=["\'](s[^"\']+)["\'])',
     re.IGNORECASE,
 )
 SLIDE_BLOCK_RE = re.compile(
-    r'(<div\b(?=[^>]*\bclass="slide[^"]*")(?=[^>]*\bid="(s[^"]+)")[^>]*>)(.*?)'
-    r'(?=<div\b[^>]*\bclass="slide(?!-)|<div\b[^>]*\bid="nav"|</body>)',
+    r'(<div\b(?=[^>]*\bclass=["\']slide[^"\']*["\'])(?=[^>]*\bid=["\'](s[^"\']+)["\'])[^>]*>)(.*?)'
+    r'(?=<div\b[^>]*\bclass=["\']slide(?!-)|<div\b[^>]*\bid=["\']nav["\']|</body>)',
     re.DOTALL | re.IGNORECASE,
 )
 TOTAL_RE = re.compile(r'<span\s+id="total"[^>]*>\s*(\d+)\s*</span>', re.IGNORECASE)
 PLACEHOLDER_RE = re.compile(r"\{\{IMG:.+?\}\}")
 IMG_TAG_RE = re.compile(r"<img\s[^>]*>", re.IGNORECASE)
 ALT_RE = re.compile(r'\balt\s*=\s*["\']', re.IGNORECASE)
-SPEAKER_NOTES_RE = re.compile(r'class="speaker-notes"', re.IGNORECASE)
+SPEAKER_NOTES_RE = re.compile(r'class=["\']speaker-notes["\']', re.IGNORECASE)
 DISPLAY_NONE_SLIDE_RE = re.compile(r"\.slide[^{]*\{[^}]*display\s*:\s*none", re.IGNORECASE)
 REDUCED_MOTION_RE = re.compile(r"prefers-reduced-motion", re.IGNORECASE)
 MATERIAL_URL_RE = re.compile(r"fonts\.googleapis\.com/css2\?family=Material\+Symbols\+Rounded")
-MATERIAL_CLASS_RE = re.compile(r'class="material-symbols-rounded"')
+MATERIAL_CLASS_RE = re.compile(r'class=["\']material-symbols-rounded["\']')
 MATERIAL_ICON_SPAN_RE = re.compile(
-    r'<span[^>]*class="material-symbols-rounded"[^>]*>\s*([a-z_]+)\s*</span>',
+    r'<span[^>]*class=["\']material-symbols-rounded["\'][^>]*>\s*([a-z_]+)\s*</span>',
     re.IGNORECASE,
 )
 GRADIENT_ID_RE = re.compile(
@@ -203,7 +203,7 @@ ICON_BLOCKLIST: dict[str, str] = {
     "docker":        "inventory_2, dns, or memory (not in Material Symbols library)",
 }
 HTML_TAG_RE = re.compile(r"<[^>]+>")
-NOTES_BLOCK_RE = re.compile(r'<div\s+class="speaker-notes"[^>]*>.*?</div>', re.DOTALL | re.IGNORECASE)
+NOTES_BLOCK_RE = re.compile(r'<div\s+class=["\']speaker-notes["\'][^>]*>.*?</div>', re.DOTALL | re.IGNORECASE)
 TABLE_BLOCK_RE = re.compile(r"<table\b[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE)
 STYLE_TAG_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
 SCRIPT_TAG_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
@@ -300,15 +300,15 @@ JS_KEY_B_RE = re.compile(r"""['"]B['"]\s*:.*?[Pp]anel|case\s+['"]B['"]\s*[:\n].*
 JS_TOGGLE_NOTES_RE = re.compile(r'\btoggleNotes\s*\(')
 TW_TYPEWRITE_RE = re.compile(r'\btwTypewrite\s*\(')
 TW_PENDING_RE = re.compile(r'\.tw-pending\b')
-CODE_BLOCK_RE = re.compile(r'class="[^"]*code-block')
+CODE_BLOCK_RE = re.compile(r'class=["\'][^"\']*code-block')
 FONT_SIZE_PX_RE = re.compile(r'font-size\s*:\s*\d+(?:\.\d+)?px')
-LEGACY_ICON_CLASS_RE = re.compile(r'class="[^"]*material-icons[^"]*"', re.IGNORECASE)
+LEGACY_ICON_CLASS_RE = re.compile(r'class=["\'][^"\']*material-icons[^"\']*["\']', re.IGNORECASE)
 SLIDE_INNER_RE = re.compile(
-    r'<div\b[^>]*class="[^"]*slide-inner[^"]*"',
+    r'<div\b[^>]*class=["\'][^"\']*slide-inner[^"\']*["\']',
     re.IGNORECASE,
 )
 GRADIENT_BG_CLASS_RE = re.compile(
-    r'class="[^"]*gradient-bg[^"]*"',
+    r'class=["\'][^"\']*gradient-bg[^"\']*["\']',
     re.IGNORECASE,
 )
 LIGHT_BG_RE = re.compile(
@@ -320,7 +320,7 @@ DARK_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 CB_LEADING_WS_RE = re.compile(
-    r'<div[^>]+class="[^"]*code-block[^"]*"[^>]*>\s*\n',
+    r'<div[^>]+class=["\'][^"\']*code-block[^"\']*["\'][^>]*>\s*\n',
     re.IGNORECASE
 )
 

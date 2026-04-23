@@ -315,7 +315,19 @@ Slide 4: Core -- Step Flow showing the process
 Slide N: Takeaway -- Stat Callout + call to action
 ```
 
-**⚠️ MANDATORY STOPPING POINT**: Present slide plan to user. Do NOT proceed to Step 3 until user explicitly approves.
+**⚠️ MANDATORY STOPPING POINT**: Call `create_plan` to present the deck outline as a plan card, then call `switch_mode` with `target_mode_id: "plan"` to enter plan mode and wait for the user to click Build before proceeding to Step 3.
+
+**`create_plan` structure:**
+- `name`: `[topic-slug]-deck` (e.g. `cortex-ai-overview-deck`)
+- `overview`: One sentence: "[N]-slide [audience] deck on [topic] using [accent color] accent."
+- `plan`: The full slide-by-slide outline above (markdown), plus config summary (accent, speaker notes, exec mode)
+- `tasks`: Workflow phases — adapt batch groupings to keep total tasks ≤ 8:
+  - Task 1: `Generate HTML shell` (status: `not-started`)
+  - Tasks 2–(N-2): `Build slides [X]–[Y]: [types]` — 4 slides per batch; if total batches would exceed 6, use 6-slide batches instead (status: `not-started`)
+  - Task N-1: `Post-build: embed images + QR codes` — include only if deck has images or external links (status: `not-started`)
+  - Task N: `Validate and QA` (status: `not-started`)
+
+After calling `create_plan`, call `switch_mode` with `target_mode_id: "plan"`. The user clicking Build returns to agent mode — only then proceed to Step 3.
 
 **Executive deck plan (exec_mode):**
 
@@ -337,7 +349,7 @@ Executive deck rules:
 - **No Agenda slide.** Skip entirely — executives prefer to reach the point immediately.
 - **No setup/problem-framing before BLUF.** Slide 2 is always the recommendation, not context.
 
-**Checkpoint:** Once user approves, save full slide plan to `[folder]/[topic-slug]-plan.md` before build. Update `manifest.json`.
+**Checkpoint:** Once the user clicks Build, save full slide plan to `[folder]/[topic-slug]-plan.md` and update `manifest.json` before starting the build.
 
 ---
 
@@ -385,7 +397,7 @@ Generate single self-contained HTML file following Slide Structure, HTML Output,
 
 **Do NOT read the other 8 reference files** (`presentation-runtime.md`, `slide-structure.md`, `content-rules.md`, `html-output-spec.md`, `visual-components.md`, `css-animations.md`, `accent-colors.md`, `graphics-embedding.md`) at build time. They are compressed into `references/subagent-bundle.md` which gets embedded in each subagent prompt. (`accent-colors.md` is read at Step 1 for color selection — do not re-read it here.) Reading them into main context at Step 3 wastes ~10,000 words for no benefit.
 
-**Build mode:** All HTML generation delegated to subagents. Main context orchestrates: reads `slide-build-protocol.md`, launches subagents (passing `references/subagent-bundle.md` + `references/material-icons.md` by embedding their contents in each subagent prompt), checks progress, handles embed/QR/validation. Keeps HTML and reference content out of main context, preserving room for iteration.
+**Build mode:** All HTML generation delegated to subagents. Main context orchestrates: reads `slide-build-protocol.md`, launches subagents (passing `references/subagent-bundle.md` + `references/material-symbols.md` by embedding their contents in each subagent prompt), checks progress, handles embed/QR/validation. Keeps HTML and reference content out of main context, preserving room for iteration.
 
 **Inlining Snowflake logo (if selected in Step 1):** Place bare `{{SNOWFLAKE_LOGO}}` token on its own line as **first child inside `.slide-inner`** on title slide (before `<h3>` eyebrow). `embed_image.py` replaces it automatically — do NOT read SVG file, do NOT write `<svg>` or `<path>` markup.
 
@@ -415,7 +427,7 @@ Script:
 
 If non-zero exit, read error output and fix arguments — do NOT fall back to subagent. Common errors: wrong output path, missing `--accent`, slide count mismatch.
 
-After success, update `manifest.json` with `html: {status: "shell_complete", "last_slide": 0}`. Inform user: "Shell saved — building slides now."
+After success, update `manifest.json` with `html: {status: "shell_complete", "last_slide": 0}`. Inform user: "Shell saved — building slides now." Call `system_todo_write` to mark task 1 ("Generate HTML shell") as `completed` and task 2 (first slide batch) as `in_progress`.
 
 ### Step 3.5: Shell Verification
 
@@ -471,7 +483,7 @@ If captured, save to `[folder]/screenshots/` (create directory if needed). If no
 
 Then manually verify:
 - Accent color consistent across all slides
-- Material Icons render correctly (not as text)
+- Material Symbols render correctly (not as text)
 - Animations fire on slide enter
 - Navigation works (arrow keys, counter visible)
 - **All external links return HTTP 200** — re-run URL validation if skipped or if links added during iteration

@@ -6,7 +6,7 @@ Every slide MUST use at least one of these components. Text-only slides are not 
 - **External links:** Every `<a href="https://...">` MUST include `target="_blank" rel="noopener"` — the validator fails any external anchor missing either attribute.
 - **List alignment:** Every `<ul>` and `<ol>` MUST include `text-align:left` as an inline style or via a CSS class — prevents misalignment when a parent container centers text.
 - **Connector arrows and flow lines MUST use `var(--accent)` or a bright visible color — NEVER `var(--border)`, dark gray, or any color that blends into the dark slide background.** This applies to: Material Icon `arrow_forward` between step flow cards, SVG `<line>` and `<path>` connectors in architecture/inline diagrams, and any other visual connector element. Invisible arrows defeat the purpose of a flow diagram.
-- **Material Icons** — for blacklisted names and a full curated icon list organized by concept and industry, see [`references/material-icons.md`](material-icons.md). Do not invent icon names.
+- **Material Symbols** — for blacklisted names and a full curated icon list organized by concept and industry, see [`references/material-symbols.md`](material-symbols.md). Do not invent icon names.
 
 ---
 
@@ -106,7 +106,7 @@ Use for: processes, tutorials, how-it-works.
   <div class="card">
     <div style="font-size:2rem;font-weight:700;color:var(--accent);">01</div>
     <h4>Step Name</h4>
-    <p style="font-size:0.875rem;">Description</p>
+    <p style="font-size:1rem;">Description</p>
   </div>
   <span class="material-symbols-rounded" style="color:var(--accent);font-size:2rem;">arrow_forward</span>
   <!-- repeat -->
@@ -119,7 +119,7 @@ Use for: processes, tutorials, how-it-works.
 Card container with an absolutely-positioned serif opening quote mark (`&ldquo;`) in the upper-left corner, italic quote text below with top margin to clear the mark, and an attribution line.
 Use for: testimonials, expert quotes, key statements.
 
-**Required `<head>` dependency** — add this line alongside the Material Icons link:
+**Required `<head>` dependency** — add this line alongside the Material Symbols link:
 ```html
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 ```
@@ -128,15 +128,15 @@ This loads Playfair Display 700, used by the opening quote mark. Without it the 
 ```html
 <div class="card anim" style="padding:clamp(14px,2vh,22px) clamp(16px,2vw,24px) clamp(14px,2vh,22px);position:relative;">
   <div aria-hidden="true" style="position:absolute;top:-2px;left:10px;font-size:clamp(3.5rem,5.5vw,5rem);color:var(--accent);opacity:0.65;font-family:'Playfair Display',Georgia,'Times New Roman',serif;line-height:1;pointer-events:none;user-select:none;">&ldquo;</div>
-  <p style="font-style:italic;font-size:clamp(0.88rem,1.25vw,1.12rem);line-height:1.65;color:var(--text);margin-top:clamp(28px,3.5vh,40px);">Quote text here.</p>
-  <p style="font-size:clamp(0.78rem,1.05vw,0.95rem);color:var(--secondary);margin-top:10px;">— Attribution Name, Title, Organization</p>
+  <p style="font-style:italic;font-size:clamp(1rem,1.4vw,1.25rem);line-height:1.65;color:var(--text);margin-top:clamp(28px,3.5vh,40px);">Quote text here.</p>
+  <p style="font-size:clamp(0.875rem,1.15vw,1.05rem);color:var(--secondary);margin-top:10px;">— Attribution Name, Title, Organization</p>
 </div>
 ```
 
 ---
 
 ## Icon + Label List
-Vertical list with Material Icons on the left, labels on the right.
+Vertical list with Material Symbols icons on the left, labels on the right.
 Use for: feature lists, checklists, requirements.
 
 **Important:** When list items use a leading icon or symbol, the parent `<ul>` MUST set `list-style:none;padding:0;` to suppress browser default bullets.
@@ -204,8 +204,8 @@ Use for: history, roadmap, project phases.
   <div style="display:flex;justify-content:space-between;position:relative;">
     <div style="text-align:center;">
       <div style="width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 auto 12px;"></div>
-      <p style="font-size:0.875rem;font-weight:600;">Label</p>
-      <p style="font-size:0.75rem;color:var(--secondary);">Date or detail</p>
+      <p style="font-size:1rem;font-weight:600;">Label</p>
+      <p style="font-size:0.875rem;color:var(--secondary);">Date or detail</p>
     </div>
   </div>
 </div>
@@ -266,7 +266,7 @@ Standard marker template:
 
 Replace `arrN` with a unique ID per SVG (convention: `arr` + slide number, e.g., `arr7` for slide 7). Run `svg_calc.py marker --gap <px>` to compute marker dimensions for non-standard gap sizes.
 
-**Never use inline icon SVGs** — standard icon paths (e.g. Material Icons SVG exports) use `viewBox="0 0 24 24"` with 3-unit insets that exceed the 12% gap threshold. Use `<span class="material-symbols-rounded">icon_name</span>` instead. If you must embed an icon as SVG, crop the viewBox to remove inset padding: e.g. for a path with content between y=3–21, use `viewBox="0 3 24 18"`.
+**Never use inline icon SVGs** — standard icon paths (e.g. legacy Material Icons SVG exports) use `viewBox="0 0 24 24"` with 3-unit insets that exceed the 12% gap threshold. Use `<span class="material-symbols-rounded">icon_name</span>` instead. If you must embed an icon as SVG, crop the viewBox to remove inset padding: e.g. for a path with content between y=3–21, use `viewBox="0 3 24 18"`.
 
 **SVG viewBox MUST be tight to content bounds** — the gap between the last content element's bottom edge and the viewBox bottom should not exceed 12% of the viewBox height. Excessive bottom padding causes the diagram to render smaller than necessary. After placing all elements, set viewBox height to `max_content_bottom + 20px`. Run `svg_calc.py viewbox --elements "y1:h1,y2:h2,..."` to compute the correct height.
 
@@ -376,7 +376,7 @@ Use for: feature matrices, multi-column comparisons, spec sheets, data grids.
 
 ```html
 <div class="anim" style="width:100%;overflow-x:auto;">
-  <table style="width:100%;border-collapse:collapse;font-size:1rem;">
+  <table style="width:100%;border-collapse:collapse;font-size:1.125rem;">
     <thead>
       <tr>
         <th style="padding:12px 16px;text-align:left;border-bottom:2px solid var(--accent);color:var(--accent);font-weight:600;">Column A</th>
@@ -476,7 +476,7 @@ Use for: important caveats, feature flags, "before you begin" notices, pro tips.
   background:rgba(41,181,232,0.1);border:1px solid rgba(41,181,232,0.35);
   border-left:4px solid var(--accent);border-radius:12px;
   padding:20px 24px;width:100%;max-width:800px;margin:16px auto;">
-  <span class="material-symbols-rounded" style="color:var(--accent);font-size:1.5rem;flex-shrink:0;margin-top:2px;">info</span>
+  <span class="material-symbols-rounded" style="color:var(--accent);font-size:1.75rem;flex-shrink:0;margin-top:2px;">info</span>
   <div>
     <p style="font-weight:600;font-size:1rem;margin-bottom:4px;">Banner Title</p>
     <p style="font-size:0.9375rem;color:var(--secondary);line-height:1.5;">Supporting detail text for the callout.</p>
@@ -503,7 +503,7 @@ Use for: tech stacks, product feature tags, supported platforms, skill sets.
   <span style="display:inline-flex;align-items:center;gap:6px;
     padding:8px 18px;border-radius:999px;
     background:rgba(41,181,232,0.12);border:1px solid rgba(41,181,232,0.3);
-    font-size:0.9375rem;font-weight:500;color:var(--accent);">
+    font-size:1rem;font-weight:500;color:var(--accent);">
     <span class="material-symbols-rounded" style="font-size:1rem;">code</span>
     Python
   </span>

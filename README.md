@@ -105,10 +105,9 @@ The `scripts/` directory contains Python utilities that handle image processing,
 | `color_swap_svg.py` | Recolor SVG fills/strokes for dark backgrounds |
 | `embed_image.py` | Replace `{{IMG:...}}` / `{{SVG_INLINE:...}}` placeholders with base64/inline content |
 | `insert_presenter.py` | Inject a presenter slide (resize + base64 + insert + renumber); max 9 presenters |
-| `validate_deck.py` | 34-check linter for slide IDs, accessibility, SVG sizing, icons, code blocks, and more |
+| `validate_deck.py` | 36-check linter for slide IDs, accessibility, SVG sizing, icons, code blocks, and more |
 | `generate_qr_appendix.py` | Append a QR code "Resources" slide for all external links |
 | `update_icon_list.py` | Download the Material Symbols Rounded codepoints from GitHub and save to `material_symbols_names.txt` for exhaustive icon validation |
-| `subset_icons.py` | Rewrite the Material Symbols font link to subset only icons used in the deck (~295 KB → ~2 KB) |
 | `export_to_pptx.py` | Export a finished deck to PowerPoint (.pptx) with speaker notes |
 | `svg_calc.py` | Coordinate calculator for SVG diagrams (stack, grid, viewbox, markers, audit) |
 | `validate_urls.py` | Verify all external URLs in a deck are reachable |
@@ -144,7 +143,7 @@ html-presentaion-skill/          ← repo root
     │   ├── export-to-pptx.md
     │   ├── graphics-embedding.md
     │   ├── html-output-spec.md
-    │   ├── material-icons.md
+    │   ├── material-symbols.md
     │   ├── presentation-runtime.md
     │   ├── research-prompt.md
     │   ├── slide-build-protocol.md
@@ -170,7 +169,6 @@ html-presentaion-skill/          ← repo root
         ├── generate_qr_appendix.py
         ├── update_icon_list.py
         ├── material_symbols_names.txt
-        ├── subset_icons.py
         ├── export_to_pptx.py
         ├── svg_calc.py
         └── validate_urls.py
