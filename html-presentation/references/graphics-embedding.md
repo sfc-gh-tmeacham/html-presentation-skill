@@ -43,6 +43,7 @@ Three tokens are available. **Always prefer the one highest in this table** for 
 | Token | Asset type | Result | When to use |
 |---|---|---|---|
 | `{{SNOWFLAKE_LOGO}}` | Snowflake logo only | Inline `<svg>` | Title slide logo — always use this, never `{{IMG:...}}` or `{{SVG_INLINE:...}}` for the Snowflake logo |
+| `{{LOGO_INLINE:path}}` or `{{LOGO_INLINE:path\|css}}` | Customer/partner logos (SVG) | Inline `<svg>` with `role="img"` | Logos on title/presenter slides — identical to `{{SVG_INLINE:...}}` but auto-stamps `role="img"` so `validate_deck.py` skips geometry checks |
 | `{{SVG_INLINE:path}}` | User-provided `.svg` | Inline `<svg>` | Customer logos, icon graphics, diagrams supplied as SVG files — **preferred over `{{IMG:...}}` for all SVGs** |
 | `{{IMG:path}}` | Raster images (PNG/JPG/GIF/WebP) and SVGs you need inside an `<img>` tag | `data:` URI | Photos, screenshots, raster graphics; also use for SVGs that must live in an `<img>` element |
 
@@ -66,16 +67,18 @@ Use `scripts/run_script.py screenshot_to_slide.py <input> [--max-size 800] [--pa
 
 ### User-provided SVG (logos, icons, diagrams)
 
-Use `{{SVG_INLINE:path}}` as a standalone token where the SVG should appear:
+Use `{{SVG_INLINE:path}}` as a standalone token where the SVG should appear. For customer or partner **logos**, use `{{LOGO_INLINE:path}}` instead — it behaves identically but adds `role="img"` automatically so the SVG geometry validator skips it:
 
 ```html
-{{SVG_INLINE:customer-logo.svg}}
+{{LOGO_INLINE:customer-logo.svg}}
+{{LOGO_INLINE:customer-logo.svg|height:60px;display:block;margin:0 auto}}
 ```
 
-Pass an optional CSS style string (second arg, separated by `|`) to control sizing and positioning:
+For non-logo SVGs (diagrams, charts):
 
 ```html
-{{SVG_INLINE:customer-logo.svg|height:60px;display:block;margin:0 auto}}
+{{SVG_INLINE:architecture-diagram.svg}}
+{{SVG_INLINE:chart.svg|max-height:60vh;width:100%}}
 ```
 
 The style is injected onto the root `<svg>` element. User-provided SVGs are automatically sanitized: `<script>` elements, `on*` event handlers, `javascript:` URIs, XML declarations, and HTML comments are stripped before injection.
